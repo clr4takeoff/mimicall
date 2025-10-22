@@ -68,3 +68,4 @@ ios/xcuserdata/
 macos/xcuserdata/
 web/**/.firebase/
 web/**/firebase-messaging-sw.js
+.env
