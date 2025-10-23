@@ -8,13 +8,13 @@ class STTService {
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
 
   bool _isListening = false;
+  bool _isStopped = false; // 완전 정지 여부 추가
   String _currentText = '';
   Timer? _silenceTimer;
 
   final int silenceThreshold;
   final String callId;
 
-  /// 콜백: 인식된 텍스트를 외부로 전달
   Function(String)? onSpeechResult;
 
   STTService({
@@ -25,37 +25,29 @@ class STTService {
   Future<void> initialize() async {
     final status = await Permission.microphone.request();
     if (!status.isGranted) {
-      print('[STT] 마이크 권한이 거부되었습니다.');
+      print('[STT] 마이크 권한 거부됨');
       return;
     }
 
     bool available = await _speech.initialize(
       onError: (val) => print('[STT Error]: $val'),
       onStatus: (val) {
-        if (val == 'done') {
-          _handleSilence();
-        }
+        if (val == 'done') _handleSilence();
       },
     );
 
-    if (available) {
-      print('[STT] 초기화 완료');
-    } else {
-      print('[STT] 음성 인식 엔진 사용 불가');
-    }
+    if (available) print('[STT] 초기화 완료');
   }
 
   Future<void> startListening() async {
-    if (_isListening) return;
+    if (_isListening || _isStopped) return; // 중단 상태면 시작 안함
 
     try {
       _isListening = true;
       await _speech.listen(
         onResult: (val) {
           _currentText = val.recognizedWords;
-          if (onSpeechResult != null) {
-            onSpeechResult!(_currentText);
-          }
+          if (onSpeechResult != null) onSpeechResult!(_currentText);
           _resetSilenceTimer();
         },
         listenMode: stt.ListenMode.dictation,
@@ -73,13 +65,22 @@ class STTService {
   }
 
   Future<void> _handleSilence() async {
+    if (_isStopped) return; // 완전 정지면 무시
+
     if (_currentText.isNotEmpty) {
       await _uploadToFirebase(_currentText);
       _currentText = '';
     }
+
     await _speech.stop();
     _isListening = false;
-    Future.delayed(const Duration(seconds: 1), startListening);
+
+    // 완전 정지 상태가 아닐 때만 다시 시작
+    if (!_isStopped) {
+      Future.delayed(const Duration(seconds: 1), () {
+        if (!_isStopped) startListening();
+      });
+    }
   }
 
   Future<void> _uploadToFirebase(String text) async {
@@ -92,9 +93,11 @@ class STTService {
   }
 
   Future<void> stopListening() async {
+    _isStopped = true; // 완전 정지 표시
     _silenceTimer?.cancel();
     await _speech.stop();
     _isListening = false;
-    print('[STT] 중지됨');
+    print('[STT] 완전 중지됨');
   }
 }
+

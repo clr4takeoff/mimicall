@@ -48,45 +48,29 @@ class _InCallScreenState extends State<InCallScreen> {
   void _onEndCall() async {
     await _sttService.stopListening();
 
+    const bool useDalle = false; // ← 여기를 false로 두면 API 안씀
     final gpt = GPTResponse();
     const imagePrompt = "밝은 하늘 아래에서 메타몽이 미소 짓는 장면을 그려줘";
 
     String imageBase64 = "";
-    String reportKey =
-        "reports/est/${DateTime.now().toIso8601String().replaceAll(':', '-')}";
 
-    // 로딩 다이얼로그 표시
+    // 로딩 다이얼로그
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) => Dialog(
         backgroundColor: Colors.white,
-        elevation: 10,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            children: [
-              Image.asset(
-                'assets/characters/ditto.png',
-                height: 80,
-              ),
-              const SizedBox(height: 20),
-              const CircularProgressIndicator(
-                strokeWidth: 5,
-                color: Colors.purpleAccent,
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                "(dummy)메타몽이 그림을 그리고 있어요...",
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.black87,
-                ),
+            children: const [
+              CircularProgressIndicator(color: Colors.purpleAccent),
+              SizedBox(height: 20),
+              Text(
+                "메타몽이 그림을 그리고 있어요...",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -95,26 +79,29 @@ class _InCallScreenState extends State<InCallScreen> {
       ),
     );
 
-
     try {
-      imageBase64 = await gpt.generateAndSaveImageBase64(
-        prompt: imagePrompt,
-        dbPath: widget.dbPath,
-      );
-      debugPrint("이미지 생성 및 저장 완료 (${imageBase64.length} bytes)");
+      if (useDalle) {
+        // 실제 DALL·E 호출
+        imageBase64 = await gpt.generateAndSaveImageBase64(
+          prompt: imagePrompt,
+          dbPath: widget.dbPath,
+        );
+        debugPrint("이미지 생성 완료 (${imageBase64.length} bytes)");
+      } else {
+        // 테스트 모드: dummy사용
+        imageBase64 = "";
+        debugPrint("테스트 모드: DALL·E 호출 생략");
+      }
     } catch (e) {
       debugPrint("이미지 생성 실패: $e");
     } finally {
-      if (context.mounted) Navigator.pop(context);
+      if (context.mounted) Navigator.pop(context); // 로딩 닫기
     }
 
-    // 로딩 닫기 → 이동
+    // 리포트 화면 이동
     if (!mounted) return;
-    Navigator.pop(context); // 로딩 다이얼로그 닫기
-
-    // Report 객체 생성
     final report = ConversationReport(
-      id: reportKey,
+      id: widget.dbPath,
       summary: "오늘 메타몽과 즐거운 대화를 나눴어요!",
       imageUrl: "",
       imageBase64: imageBase64,

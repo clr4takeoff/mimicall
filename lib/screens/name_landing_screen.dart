@@ -39,7 +39,7 @@ class _NameLandingScreenState extends State<NameLandingScreen> {
     });
 
     if (mounted) {
-      Navigator.pushReplacement(
+      Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => MainScreen(userName: name)),
       );
