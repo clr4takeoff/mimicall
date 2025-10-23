@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'report_screen.dart';
 import '../models/report_model.dart';
 import '../services/stt_service.dart';
+import '../services/llm_service.dart';
 
 class InCallScreen extends StatefulWidget {
-  const InCallScreen({super.key});
+  final String dbPath;
+  const InCallScreen({super.key, required this.dbPath});
 
   @override
   State<InCallScreen> createState() => _InCallScreenState();
@@ -12,6 +14,7 @@ class InCallScreen extends StatefulWidget {
 
 class _InCallScreenState extends State<InCallScreen> {
   bool isSpeaking = false;
+  bool isFairyMode = false; // 요정 모드 상태
   String dummySpeech = "메타몽 목이 너무 말라... 근데 뭐라고 말해야 할지 모르겠어 😥";
   String childSpeech = "";
 
@@ -41,28 +44,83 @@ class _InCallScreenState extends State<InCallScreen> {
     super.dispose();
   }
 
+  /// 통화 종료 시 리포트 화면으로 이동
   void _onEndCall() async {
     await _sttService.stopListening();
 
+    final gpt = GPTResponse();
+    const imagePrompt = "밝은 하늘 아래에서 메타몽이 미소 짓는 장면을 그려줘";
+
+    String imageBase64 = "";
+    String reportKey =
+        "reports/est/${DateTime.now().toIso8601String().replaceAll(':', '-')}";
+
+    // 로딩 다이얼로그 표시
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text(
+              "이미지를 생성 중입니다...",
+              style: TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      debugPrint("이미지 생성 시작...");
+      imageBase64 = await gpt.generateAndSaveImageBase64(
+        prompt: imagePrompt,
+        dbPath: reportKey,
+      );
+      debugPrint("이미지 생성 및 저장 완료 (${imageBase64.length} bytes)");
+    } catch (e) {
+      debugPrint("이미지 생성 실패: $e");
+    }
+
+    // 로딩 닫기 → 이동
+    if (!mounted) return;
+    Navigator.pop(context); // 로딩 다이얼로그 닫기
+
+    // Report 객체 생성
     final report = ConversationReport(
-      id: DateTime.now().toIso8601String(),
-      summary: "오늘 하츄핑과 즐거운 대화를 나눴어요!",
-      imageUrl: "https://placekitten.com/400/300",
+      id: reportKey,
+      summary: "오늘 메타몽과 즐거운 대화를 나눴어요!",
+      imageUrl: "",
+      imageBase64: imageBase64,
       speechRatio: {"아이": 60, "AI": 40},
       createdAt: DateTime.now(),
     );
 
-    if (!mounted) return;
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (_) => ReportScreen(report: report)),
     );
   }
 
+  /// 요정 모드 토글
+  void _toggleFairyMode() {
+    setState(() {
+      isFairyMode = !isFairyMode;
+
+      if (isFairyMode) {
+        dummySpeech = "걱정 마! 병아리 요정이 왔어! 🌟 자, 같이 천천히 말해볼까?";
+      } else {
+        dummySpeech = "메타몽 목이 너무 말라... 근데 뭐라고 말해야 할지 모르겠어 😥";
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // ✨ 밝은 하늘색~보라색 그라데이션 배경
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -178,23 +236,25 @@ class _InCallScreenState extends State<InCallScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // 마이크 버튼
+                  /// 도우미 요정 버튼 (토글 가능)
                   FloatingActionButton(
-                    heroTag: 'mute',
-                    backgroundColor: const Color(0xFF91D8F7),
-                    onPressed: () {
-                      setState(() {
-                        isSpeaking = !isSpeaking;
-                      });
-                    },
+                    heroTag: 'fairy',
+                    backgroundColor: isFairyMode
+                        ? const Color(0xFFB39DDB) // 요정 모드 중
+                        : const Color(0xFF91D8F7), // 기본 모드
+                    onPressed: _toggleFairyMode,
                     child: Icon(
-                      isSpeaking ? Icons.mic : Icons.mic_off,
-                      size: 30,
+                      isFairyMode
+                          ? Icons.undo // 돌아가기
+                          : Icons.auto_awesome, // ✨ 요정 소환
+                      size: 32,
                       color: Colors.white,
                     ),
                   ),
+
                   const SizedBox(width: 70),
-                  // 종료 버튼
+
+                  /// 통화 종료 버튼
                   FloatingActionButton(
                     heroTag: 'end',
                     backgroundColor: const Color(0xFFFF6B6B),

@@ -3,6 +3,7 @@ import '../models/report_model.dart';
 import '../screens/main_screen.dart';
 import '../widgets/report_summary_box.dart';
 import '../widgets/report_actions.dart';
+import '../widgets/report_image.dart';
 
 class ReportScreen extends StatelessWidget {
   final ConversationReport report;
@@ -19,6 +20,7 @@ class ReportScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.close),
+            tooltip: '홈으로 이동',
             onPressed: () {
               Navigator.pushAndRemoveUntil(
                 context,
@@ -29,28 +31,43 @@ class ReportScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            const SizedBox(height: 8),
-            const Text(
-              "축하해요 임무 완료!",
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            if (report.imageUrl.isNotEmpty)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.network(report.imageUrl, height: 180),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const SizedBox(height: 8),
+              const Text(
+                "축하해요 임무 완료!",
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
               ),
-            const SizedBox(height: 20),
-            ReportSummaryBox(report: report),
-            const SizedBox(height: 24),
-            const ReportActions(),
-          ],
+              const SizedBox(height: 16),
+
+              // Base64 or URL 이미지 표시
+              ReportImage(
+                imageUrl: report.imageUrl,
+                imageBase64: report.imageBase64,
+              ),
+
+              const SizedBox(height: 24),
+              ReportSummaryBox(report: report),
+              const SizedBox(height: 24),
+              const ReportActions(),
+              const SizedBox(height: 12),
+              Text(
+                "생성일: ${_formatDate(report.createdAt)}",
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  static String _formatDate(DateTime date) {
+    return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
   }
 }

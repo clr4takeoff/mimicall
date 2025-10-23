@@ -1,14 +1,16 @@
 class ConversationReport {
   final String id;
-  final String summary;          // 요약 내용
-  final String imageUrl;         // AI가 생성한 이미지
-  final Map<String, double> speechRatio; // 발화 비율 그래프 데이터
+  final String summary;
+  final String imageUrl;
+  final String? imageBase64;
+  final Map<String, double> speechRatio;
   final DateTime createdAt;
 
   ConversationReport({
     required this.id,
     required this.summary,
     required this.imageUrl,
+    this.imageBase64,
     required this.speechRatio,
     required this.createdAt,
   });
@@ -18,6 +20,7 @@ class ConversationReport {
       id: json['id'] ?? '',
       summary: json['summary'] ?? '',
       imageUrl: json['imageUrl'] ?? '',
+      imageBase64: json['imageBase64'],
       speechRatio: Map<String, double>.from(json['speechRatio'] ?? {}),
       createdAt: DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
     );
@@ -28,6 +31,7 @@ class ConversationReport {
       'id': id,
       'summary': summary,
       'imageUrl': imageUrl,
+      'imageBase64': imageBase64,
       'speechRatio': speechRatio,
       'createdAt': createdAt.toIso8601String(),
     };

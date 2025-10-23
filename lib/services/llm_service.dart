@@ -1,94 +1,87 @@
 import 'dart:convert';
-import 'dart:async';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_database/firebase_database.dart';
 
 class GPTResponse {
-  final url = Uri.parse("https://api.openai.com/v1/chat/completions");
-  final dbRef = FirebaseDatabase.instance.ref("gpt_responses");
+  final _imageUrl = Uri.parse("https://api.openai.com/v1/images/generations");
 
-  /// GPT 코멘트 응답 가져오기 + Firebase에 저장
-  Future<String> fetchGPTCommentResponse(String content) async {
-    final apiKey = dotenv.env['OPENAI_API_KEY']; // .env에서 불러오기
-    if (apiKey == null || apiKey.isEmpty) {
-      return "API key not found in .env file";
+  Future<String> generateAndSaveImageBase64({
+    required String prompt,
+    required String dbPath,
+  }) async {
+    // 1. dotenv에서 런타임에 API 키 읽기
+    final apiKey = dotenv.env['OPENAI_API_KEY'] ?? '';
+
+    debugPrint("OpenAI API Key length: ${apiKey.length}");
+    if (apiKey.isEmpty) {
+      debugPrint("API 키가 비어 있습니다. .env 파일을 확인하세요.");
+      return "";
     }
 
-    const systemRole = '''
-너는 바나나랑 사과중 뭐가 더 좋은지 대답해라
-''';
+    // 2. Firebase 경로 안전하게 변환
+    final safePath = dbPath
+        .replaceAll('.', '-')
+        .replaceAll('#', '-')
+        .replaceAll('\$', '-')
+        .replaceAll('[', '-')
+        .replaceAll(']', '-');
 
-    try {
-      final response = await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $apiKey',
-        },
-        body: jsonEncode({
-          'model': 'gpt-4o',
-          'messages': [
-            {'role': 'system', 'content': systemRole},
-            {'role': 'user', 'content': content},
-          ],
-          'temperature': 1,
-        }),
-      );
+    final ref = FirebaseDatabase.instance.ref(safePath);
 
-      if (response.statusCode == 200) {
-        final data = json.decode(utf8.decode(response.bodyBytes));
-        final text = data['choices'][0]['message']['content'].trim();
+    debugPrint("OpenAI 이미지 요청 시작... (경로: $safePath)");
 
-        // Firebase에 저장
-        await dbRef.push().set({
-          'prompt': content,
-          'response': text,
-          'timestamp': DateTime.now().toIso8601String(),
-        });
+    // 3. DALL·E 3 요청
+    final response = await http.post(
+      _imageUrl,
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $apiKey",
+      },
+      body: jsonEncode({
+        "model": "dall-e-3",
+        "prompt": prompt,
+        "size": "1024x1024",
+      }),
+    );
 
-        return text;
-      } else {
-        return "오류 발생: ${response.statusCode} ${response.body}";
-      }
-    } catch (e) {
-      return 'Exception: $e';
-    }
-  }
+    debugPrint("OpenAI 응답 코드: ${response.statusCode}");
 
-  /// 프롬프트 기반 GPT 응답 (SharedPreferences는 그대로 유지 가능)
-  Future<String> fetchPromptResponse(String systemRole, String prompt) async {
-    final apiKey = dotenv.env['OPENAI_API_KEY'];
-    if (apiKey == null || apiKey.isEmpty) {
-      return "API key not found";
+    if (response.statusCode != 200) {
+      debugPrint("OpenAI 오류: ${response.body}");
+      await ref.update({"error": response.body});
+      return "";
     }
 
-    try {
-      final response = await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $apiKey',
-        },
-        body: jsonEncode({
-          'model': 'gpt-4o',
-          'messages': [
-            {'role': 'system', 'content': systemRole},
-            {'role': 'user', 'content': prompt},
-          ],
-          'temperature': 1,
-        }),
-      );
+    // 4. 이미지 URL 추출
+    final data = jsonDecode(response.body);
+    final imageUrl = data['data'][0]['url'];
+    debugPrint("이미지 URL 수신: $imageUrl");
 
-      if (response.statusCode == 200) {
-        final data = json.decode(utf8.decode(response.bodyBytes));
-        final result = data['choices'][0]['message']['content'].trim();
-        return result;
-      } else {
-        return "Failed to load data from OpenAI";
-      }
-    } catch (e) {
-      return 'Exception: $e';
+    // 5. 이미지 다운로드 및 Base64 변환
+    debugPrint("이미지 다운로드 중...");
+    final imageResponse = await http.get(Uri.parse(imageUrl));
+    if (imageResponse.statusCode != 200) {
+      debugPrint("이미지 다운로드 실패: ${imageResponse.statusCode}");
+      await ref.update({"error": "download_failed"});
+      return "";
     }
+
+    final bytes = imageResponse.bodyBytes;
+    final base64Data = base64Encode(bytes);
+    debugPrint("Base64 변환 완료 (길이: ${base64Data.length})");
+
+    // 6. Firebase에 저장
+    await ref.update({
+      "prompt": prompt,
+      "imageUrl": imageUrl,
+      "imageBase64": base64Data,
+      "createdAt": DateTime.now().toIso8601String(),
+    });
+
+    debugPrint("Firebase 저장 완료 → $safePath");
+    return base64Data;
   }
 }

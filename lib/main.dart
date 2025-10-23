@@ -12,6 +12,8 @@ Future<void> main() async {
   await dotenv.load(fileName: ".env");
   await Firebase.initializeApp();
 
+  debugPrint("OpenAI API Key loaded: ${dotenv.env['OPENAI_API_KEY']?.substring(0, 8)}...");
+
   // SharedPreferences에서 저장된 이름 확인
   final prefs = await SharedPreferences.getInstance();
   final savedName = prefs.getString('userName');

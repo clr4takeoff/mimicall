@@ -7,25 +7,29 @@ class IncomingCallScreen extends StatelessWidget {
 
   const IncomingCallScreen({super.key, this.userName});
 
-  Future<void> _createReportRecord(String userName) async {
+  Future<String> _createReportRecord(String userName) async {
     final db = FirebaseDatabase.instance.ref();
 
     final now = DateTime.now();
-    // Firebase 경로에 안전한 형식으로 변경
     final safeKey =
         "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}";
 
-    final reportRef = db.child('reports/$userName/$safeKey');
+    final dbPath = 'reports/$userName/$safeKey';
+    final reportRef = db.child(dbPath);
 
     await reportRef.set({
       'id': safeKey,
       'summary': '',
       'imageUrl': '',
+      'imageBase64': '',
       'speechRatio': {},
       'createdAt': now.toIso8601String(),
       'conversation': ['_init'],
     });
+
+    return dbPath;
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -95,18 +99,17 @@ class IncomingCallScreen extends StatelessWidget {
                   heroTag: 'accept',
                   backgroundColor: Colors.green,
                   onPressed: () async {
-                    // DB에 새 리포트 기록 생성
                     final name = userName ?? "unknown";
-                    await _createReportRecord(name);
+                    final dbPath = await _createReportRecord(name);
 
-                    // 통화 화면으로 이동
                     Navigator.pushReplacement(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const InCallScreen(),
+                        builder: (context) => InCallScreen(dbPath: dbPath),
                       ),
                     );
                   },
+
                   child: const Icon(Icons.call, size: 36),
                 ),
               ],
