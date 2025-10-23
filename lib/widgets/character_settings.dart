@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/character_settings_model.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+
 
 class CharacterSettingsDialog extends StatefulWidget {
   const CharacterSettingsDialog({super.key});
@@ -16,6 +19,18 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
     contextText: '없음',
   );
 
+  Future<void> _pickCharacterImage() async {
+    final picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+
+    if (image != null) {
+      setState(() {
+        settings = settings.copyWith(imagePath: image.path);
+      });
+    }
+  }
+
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -24,11 +39,12 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
         '캐릭터 설정',
         style: TextStyle(fontWeight: FontWeight.bold),
       ),
+
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 🖼 캐릭터 이미지 변경
+            // 캐릭터 이미지 변경
             ListTile(
               leading: const Icon(Icons.image, color: Colors.lightBlueAccent),
               title: const Text('캐릭터 이미지 변경'),
@@ -36,13 +52,11 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
                 '현재: ${settings.imagePath ?? "없음"}',
                 style: const TextStyle(color: Colors.black54, fontSize: 13),
               ),
-              onTap: () {
-                // TODO: 이미지 선택 로직 연결
-              },
+              onTap: _pickCharacterImage,
             ),
             const Divider(),
 
-            // 🎙 캐릭터 음성 설정
+            // 캐릭터 음성 설정
             ListTile(
               leading: const Icon(Icons.record_voice_over,
                   color: Colors.pinkAccent),
@@ -57,7 +71,7 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
             ),
             const Divider(),
 
-            // 💬 대화 주제 / 상황 설정
+            // 대화 주제 / 상황 설정
             ListTile(
               leading: const Icon(Icons.chat_bubble_outline_rounded,
                   color: Colors.orangeAccent),
