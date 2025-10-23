@@ -16,7 +16,7 @@ class TTSService {
     try {
       final apiKey = dotenv.env['OPENAI_API_KEY'];
       if (apiKey == null || apiKey.isEmpty) {
-        debugPrint('[TTS] ❌ API 키 없음');
+        debugPrint('[TTS] API 키 없음');
         return;
       }
 
@@ -25,9 +25,10 @@ class TTSService {
 
       final body = {
         'model': 'gpt-4o-mini-tts',
-        'voice': 'alloy', // voice 선택 가능: alloy, verse 등
+        'voice': 'shimmer',
         'input': text,
         'format': 'mp3',
+        'speed': 1.0
       };
 
       final response = await http.post(
@@ -40,7 +41,6 @@ class TTSService {
       );
 
       if (response.statusCode == 200) {
-        // ✅ 오디오 파일로 저장
         final dir = await getTemporaryDirectory();
         final file = File('${dir.path}/tts_${DateTime.now().millisecondsSinceEpoch}.mp3');
         await file.writeAsBytes(response.bodyBytes);
@@ -49,7 +49,7 @@ class TTSService {
         await _player.setFilePath(file.path);
         await _player.play();
       } else {
-        debugPrint('[TTS 오류] ${response.statusCode} ${response.body}');
+        debugPrint('[TTS 오류] ${response.statusCode}: ${response.body}');
       }
     } catch (e) {
       debugPrint('[TTS 예외] $e');
