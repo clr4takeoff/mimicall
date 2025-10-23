@@ -59,30 +59,53 @@ class _InCallScreenState extends State<InCallScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text(
-              "이미지를 생성 중입니다...",
-              style: TextStyle(color: Colors.white),
-            ),
-          ],
+      builder: (_) => Dialog(
+        backgroundColor: Colors.white,
+        elevation: 10,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                'assets/characters/ditto.png',
+                height: 80,
+              ),
+              const SizedBox(height: 20),
+              const CircularProgressIndicator(
+                strokeWidth: 5,
+                color: Colors.purpleAccent,
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                "(dummy)메타몽이 그림을 그리고 있어요...",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black87,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       ),
     );
 
+
     try {
-      debugPrint("이미지 생성 시작...");
       imageBase64 = await gpt.generateAndSaveImageBase64(
         prompt: imagePrompt,
-        dbPath: reportKey,
+        dbPath: widget.dbPath,
       );
       debugPrint("이미지 생성 및 저장 완료 (${imageBase64.length} bytes)");
     } catch (e) {
       debugPrint("이미지 생성 실패: $e");
+    } finally {
+      if (context.mounted) Navigator.pop(context);
     }
 
     // 로딩 닫기 → 이동
