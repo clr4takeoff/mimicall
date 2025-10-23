@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'in_call_screen.dart';
+import '../utils/user_info.dart';
 
 class IncomingCallScreen extends StatelessWidget {
   final String? userName;
@@ -99,7 +100,8 @@ class IncomingCallScreen extends StatelessWidget {
                   heroTag: 'accept',
                   backgroundColor: Colors.green,
                   onPressed: () async {
-                    final name = userName ?? "unknown";
+                    final name = userName ?? UserInfo.name ?? "unknown";
+                    UserInfo.name = name;
                     final dbPath = await _createReportRecord(name);
 
                     Navigator.pushReplacement(

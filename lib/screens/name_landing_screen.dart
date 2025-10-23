@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'main_screen.dart';
+import '../utils/user_info.dart';
 
 class NameLandingScreen extends StatefulWidget {
   const NameLandingScreen({Key? key}) : super(key: key);
@@ -28,6 +29,7 @@ class _NameLandingScreenState extends State<NameLandingScreen> {
       );
       return;
     }
+    UserInfo.name = name;
 
     final now = DateTime.now();
     final formattedId =

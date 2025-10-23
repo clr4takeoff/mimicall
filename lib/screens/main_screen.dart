@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'incoming_call_screen.dart';
 import 'report_list_screen.dart';
 import '../widgets/character_settings.dart';
+import '../utils/user_info.dart';
 
 class MainScreen extends StatelessWidget {
   final String? userName;
@@ -10,6 +11,9 @@ class MainScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final displayName = userName ?? UserInfo.name ?? "친구";
+    UserInfo.name = displayName;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF3F7FF),
       appBar: AppBar(
