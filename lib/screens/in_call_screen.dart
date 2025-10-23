@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'report_screen.dart';
 import '../models/report_model.dart';
 import '../services/stt_service.dart';
+import '../services/tts_service.dart';
 import '../services/llm_service.dart';
+import '../services/conversation_service.dart';
 
 
 class InCallScreen extends StatefulWidget {
@@ -20,19 +22,61 @@ class _InCallScreenState extends State<InCallScreen> {
   String childSpeech = "";
 
   late STTService _sttService;
+  late TTSService _ttsService;
 
   @override
   void initState() {
     super.initState();
     _sttService = STTService(callId: "test_call_001");
-    _sttService.onSpeechResult = (text) {
+    _ttsService = TTSService();
+
+    _sttService.onResult = (text) async {
       setState(() {
         childSpeech = text;
         isSpeaking = text.isNotEmpty;
       });
+
+      if (text.isNotEmpty) {
+        final conv = ConversationService();
+        final gpt = GPTResponse();
+
+        // 1️⃣ 아이 발화 저장
+        await conv.saveMessage(
+          dbPath: widget.dbPath,
+          role: "user",
+          text: text,
+        );
+
+        // 2️⃣ LLM 호출
+        final reply = await gpt.sendMessageToLLM(
+          text,
+          // context: widget.contextText,
+        );
+
+        // 3️⃣ AI 응답 저장
+        await conv.saveMessage(
+          dbPath: widget.dbPath,
+          role: "assistant",
+          text: reply,
+        );
+
+        // 4️⃣ UI 표시
+        setState(() {
+          dummySpeech = reply.isNotEmpty
+              ? reply
+              : "메타몽이 뭐라고 해야 할지 모르겠대요 😅";
+        });
+
+        // ✅ 5️⃣ TTS로 AI 답변 읽기
+        if (reply.isNotEmpty) {
+          await _ttsService.speak(reply);
+        }
+      }
     };
+
     _initializeSTT();
   }
+
 
   Future<void> _initializeSTT() async {
     await _sttService.initialize();
@@ -42,6 +86,7 @@ class _InCallScreenState extends State<InCallScreen> {
   @override
   void dispose() {
     _sttService.stopListening();
+    _ttsService.stop();
     super.dispose();
   }
 
@@ -102,7 +147,7 @@ class _InCallScreenState extends State<InCallScreen> {
     // 리포트 화면 이동
     if (!mounted) return;
     final report = ConversationReport(
-      id: widget.dbPath,
+      id: DateTime.now().toIso8601String().replaceAll('T', '_').split('.').first,
       summary: "오늘 메타몽과 즐거운 대화를 나눴어요!",
       imageUrl: "",
       imageBase64: imageBase64,

@@ -25,7 +25,7 @@ class IncomingCallScreen extends StatelessWidget {
       'imageBase64': '',
       'speechRatio': {},
       'createdAt': now.toIso8601String(),
-      'conversation': ['_init'],
+      'conversation': [],
     });
 
     return dbPath;

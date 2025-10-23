@@ -1,103 +1,158 @@
 import 'dart:async';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
-import 'package:firebase_database/firebase_database.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:record/record.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class STTService {
-  final stt.SpeechToText _speech = stt.SpeechToText();
-  final DatabaseReference _db = FirebaseDatabase.instance.ref();
-
-  bool _isListening = false;
-  bool _isStopped = false; // 완전 정지 여부 추가
-  String _currentText = '';
+  final String callId;
+  final Record _recorder = Record();
+  bool _isRecording = false;
+  bool _isStopped = false;
   Timer? _silenceTimer;
 
-  final int silenceThreshold;
-  final String callId;
+  String? _lastText; // 중복 방지용
+  bool _isProcessing = false; // Whisper 요청 중 여부
 
-  Function(String)? onSpeechResult;
+  Function(String text)? onResult;
 
-  STTService({
-    required this.callId,
-    this.silenceThreshold = 3,
-  });
+  STTService({required this.callId});
 
+  /// 초기화 및 권한 확인
   Future<void> initialize() async {
-    final status = await Permission.microphone.request();
-    if (!status.isGranted) {
-      print('[STT] 마이크 권한 거부됨');
+    final hasPermission = await _recorder.hasPermission();
+    if (!hasPermission) {
+      debugPrint("[STT] 마이크 권한이 없습니다.");
+      return;
+    }
+    debugPrint("[STT] 초기화 완료");
+  }
+
+  /// 음성 녹음 시작
+  Future<void> startListening() async {
+    if (_isRecording || _isStopped) return;
+    _isStopped = false;
+    _isRecording = true;
+
+    final tempDir = Directory.systemTemp.path;
+    final filePath = "$tempDir/temp_${DateTime.now().millisecondsSinceEpoch}.m4a";
+
+    debugPrint("[STT] 녹음 시작: $filePath");
+
+    await _recorder.start(
+      path: filePath,
+      encoder: AudioEncoder.aacLc,
+      bitRate: 96000, // 낮은 비트레이트로 비용 절감
+      samplingRate: 16000, // Whisper에 충분한 품질 (16kHz)
+      numChannels: 1,
+    );
+
+    _startSilenceDetection(filePath);
+  }
+
+  /// 무음 감지 로직
+  void _startSilenceDetection(String path) {
+    debugPrint("[STT] 무음 감지 시작");
+    const silenceThreshold = -40.0; // 데시벨 기준
+    const silenceDuration = Duration(seconds: 2);
+
+    Duration silentFor = Duration.zero;
+    _silenceTimer?.cancel();
+
+    _silenceTimer = Timer.periodic(const Duration(milliseconds: 400), (_) async {
+      if (_isStopped || _isProcessing) return;
+
+      final amp = await _recorder.getAmplitude();
+      final currentDb = amp.current ?? -120;
+
+      if (currentDb < silenceThreshold) {
+        silentFor += const Duration(milliseconds: 400);
+        if (silentFor >= silenceDuration) {
+          debugPrint("[STT] 무음 감지됨 → 녹음 중지 및 Whisper 요청");
+          _silenceTimer?.cancel();
+
+          await stopListening(tempStop: true);
+          await _sendToWhisper(path);
+
+          if (!_isStopped) {
+            debugPrint("[STT] 다음 입력 대기 중...");
+            await Future.delayed(const Duration(seconds: 1));
+            await startListening();
+          }
+        }
+      } else {
+        silentFor = Duration.zero;
+      }
+    });
+  }
+
+  /// Whisper API 호출
+  Future<void> _sendToWhisper(String path) async {
+    if (_isProcessing) return;
+    _isProcessing = true;
+
+    final apiKey = dotenv.env['OPENAI_API_KEY'];
+    if (apiKey == null || apiKey.isEmpty) {
+      debugPrint("[STT] API 키가 비어 있습니다.");
+      _isProcessing = false;
       return;
     }
 
-    bool available = await _speech.initialize(
-      onError: (val) => print('[STT Error]: $val'),
-      onStatus: (val) {
-        if (val == 'done') _handleSilence();
-      },
-    );
+    if (!File(path).existsSync()) {
+      debugPrint("[STT] 파일이 존재하지 않습니다: $path");
+      _isProcessing = false;
+      return;
+    }
 
-    if (available) print('[STT] 초기화 완료');
+    final uri = Uri.parse("https://api.openai.com/v1/audio/transcriptions");
+    final request = http.MultipartRequest("POST", uri)
+      ..headers["Authorization"] = "Bearer $apiKey"
+      ..fields["model"] = "whisper-1"
+      ..fields["language"] = "ko" // 한국어 고정
+      ..files.add(await http.MultipartFile.fromPath("file", path));
+
+    debugPrint("[STT] Whisper 요청 시작...");
+    final response = await request.send();
+    final body = await response.stream.bytesToString();
+
+    if (response.statusCode == 200) {
+      final text =
+          RegExp(r'"text":\s*"([^"]*)"').firstMatch(body)?.group(1)?.trim() ?? "";
+
+      // 한글, 영문, 숫자, 기본 문장부호만 남김
+      final clean = text.replaceAll(RegExp(r'[^가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z0-9\s.,!?]'), '').trim();
+
+      if (clean.isNotEmpty && clean != _lastText) {
+        _lastText = clean;
+        debugPrint("[STT 결과] $clean");
+        onResult?.call(clean);
+      } else {
+        debugPrint("[STT] 중복 혹은 비어있는 결과 무시");
+      }
+    } else {
+      debugPrint("[STT 오류] ${response.statusCode}: $body");
+    }
+
+    _isProcessing = false;
   }
 
-  Future<void> startListening() async {
-    if (_isListening || _isStopped) return; // 중단 상태면 시작 안함
+  /// 녹음 중지 (완전 중지 또는 일시정지)
+  Future<void> stopListening({bool tempStop = false}) async {
+    if (!_isRecording) return;
+    _isRecording = false;
+    _silenceTimer?.cancel();
 
     try {
-      _isListening = true;
-      await _speech.listen(
-        onResult: (val) {
-          _currentText = val.recognizedWords;
-          if (onSpeechResult != null) onSpeechResult!(_currentText);
-          _resetSilenceTimer();
-        },
-        listenMode: stt.ListenMode.dictation,
-        localeId: 'ko_KR',
-      );
-      print('[STT] 음성 인식 시작됨');
+      await _recorder.stop();
+      debugPrint("[STT] 녹음 중지");
     } catch (e) {
-      print('[STT] 시작 실패: $e');
-    }
-  }
-
-  void _resetSilenceTimer() {
-    _silenceTimer?.cancel();
-    _silenceTimer = Timer(Duration(seconds: silenceThreshold), _handleSilence);
-  }
-
-  Future<void> _handleSilence() async {
-    if (_isStopped) return; // 완전 정지면 무시
-
-    if (_currentText.isNotEmpty) {
-      await _uploadToFirebase(_currentText);
-      _currentText = '';
+      debugPrint("[STT 중지 오류] $e");
     }
 
-    await _speech.stop();
-    _isListening = false;
-
-    // 완전 정지 상태가 아닐 때만 다시 시작
-    if (!_isStopped) {
-      Future.delayed(const Duration(seconds: 1), () {
-        if (!_isStopped) startListening();
-      });
+    if (!tempStop) {
+      _isStopped = true;
+      debugPrint("[STT] 완전 종료됨");
     }
-  }
-
-  Future<void> _uploadToFirebase(String text) async {
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    await _db.child('calls/$callId/stt/$timestamp').set({
-      'text': text,
-      'timestamp': timestamp,
-    });
-    print('[STT 업로드] $text');
-  }
-
-  Future<void> stopListening() async {
-    _isStopped = true; // 완전 정지 표시
-    _silenceTimer?.cancel();
-    await _speech.stop();
-    _isListening = false;
-    print('[STT] 완전 중지됨');
   }
 }
-
