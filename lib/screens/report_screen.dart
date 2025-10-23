@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
 import '../models/report_model.dart';
-import 'main_screen.dart';
+import '../screens/main_screen.dart';
+import '../widgets/report_summary_box.dart';
+import '../widgets/report_actions.dart';
 
 class ReportScreen extends StatelessWidget {
-  final ConversationReport report; // 상황에 따라 전달되는 리포트 데이터
+  final ConversationReport report;
 
   const ReportScreen({super.key, required this.report});
 
@@ -44,75 +45,9 @@ class ReportScreen extends StatelessWidget {
                 child: Image.network(report.imageUrl, height: 180),
               ),
             const SizedBox(height: 20),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text("오늘의 대화 요약",
-                      style:
-                      TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                  const SizedBox(height: 8),
-                  Text(report.summary, style: const TextStyle(fontSize: 15)),
-                ],
-              ),
-            ),
+            ReportSummaryBox(report: report),
             const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                children: [
-                  const Text("오늘의 발화 그래프",
-                      style:
-                      TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    height: 180,
-                    child: PieChart(
-                      PieChartData(
-                        sections: report.speechRatio.entries
-                            .map(
-                              (e) => PieChartSectionData(
-                            value: e.value,
-                            title: e.key,
-                          ),
-                        )
-                            .toList(),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(builder: (_) => const MainScreen()),
-                          (route) => false,
-                    );
-                  },
-                  child: const Text("확인"),
-                ),
-                const SizedBox(width: 16),
-                OutlinedButton(
-                  onPressed: () {},
-                  child: const Text("이전 리포트 보기"),
-                ),
-              ],
-            ),
+            const ReportActions(),
           ],
         ),
       ),

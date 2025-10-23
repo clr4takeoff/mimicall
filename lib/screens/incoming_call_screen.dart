@@ -23,7 +23,7 @@ class IncomingCallScreen extends StatelessWidget {
       'imageUrl': '',
       'speechRatio': {},
       'createdAt': now.toIso8601String(),
-      'conversation': [],
+      'conversation': ['_init'],
     });
   }
 
