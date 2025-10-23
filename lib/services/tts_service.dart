@@ -9,7 +9,6 @@ import 'package:just_audio/just_audio.dart';
 class TTSService {
   final _player = AudioPlayer();
 
-  /// 텍스트를 TTS로 변환 후 재생
   Future<void> speak(String text) async {
     if (text.trim().isEmpty) return;
 
@@ -23,13 +22,13 @@ class TTSService {
       debugPrint('[TTS] 요청 시작...');
       final url = Uri.parse('https://api.openai.com/v1/audio/speech');
 
-      final body = {
+      final body = jsonEncode({
         'model': 'gpt-4o-mini-tts',
-        'voice': 'shimmer',
+        'voice': 'shimmer', // 밝고 어린 톤
         'input': text,
         'format': 'mp3',
-        'speed': 1.0
-      };
+        'speed': 1.4,
+      });
 
       final response = await http.post(
         url,
@@ -37,7 +36,7 @@ class TTSService {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $apiKey',
         },
-        body: jsonEncode(body),
+        body: body,
       );
 
       if (response.statusCode == 200) {
@@ -48,8 +47,13 @@ class TTSService {
         debugPrint('[TTS] 재생 시작: ${file.path}');
         await _player.setFilePath(file.path);
         await _player.play();
+
+        // 재생 완료까지 기다리기
+        await _player.processingStateStream.firstWhere(
+              (state) => state == ProcessingState.completed,
+        );
       } else {
-        debugPrint('[TTS 오류] ${response.statusCode}: ${response.body}');
+        debugPrint('[TTS 오류] ${response.statusCode} ${response.body}');
       }
     } catch (e) {
       debugPrint('[TTS 예외] $e');
@@ -57,7 +61,11 @@ class TTSService {
   }
 
   Future<void> stop() async {
-    await _player.stop();
+    try {
+      await _player.stop();
+    } catch (e) {
+      debugPrint('[TTS stop 오류] $e');
+    }
   }
 
   void dispose() {

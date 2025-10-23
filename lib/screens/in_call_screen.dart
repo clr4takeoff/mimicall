@@ -69,7 +69,9 @@ class _InCallScreenState extends State<InCallScreen> {
 
         // ✅ 5️⃣ TTS로 AI 답변 읽기
         if (reply.isNotEmpty) {
-          await _ttsService.speak(reply);
+          await _sttService.stopListening(tempStop: true); // STT 잠시 중단
+          await _ttsService.speak(reply);                  // 음성 재생
+          await _sttService.startListening();              // 재생 끝나면 STT 재개
         }
       }
     };
