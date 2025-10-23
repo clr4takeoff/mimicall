@@ -3,6 +3,7 @@ import 'package:firebase_database/firebase_database.dart';
 import '../models/report_model.dart';
 import '../utils/user_info.dart';
 import 'report_screen.dart';
+import '../widgets/app_header.dart';
 
 class ReportListScreen extends StatefulWidget {
   const ReportListScreen({super.key});
@@ -28,11 +29,10 @@ class _ReportListScreenState extends State<ReportListScreen> {
       final snapshot = await ref.get();
 
       if (snapshot.exists) {
-        final Map<dynamic, dynamic> data = snapshot.value as Map<dynamic, dynamic>;
-
+        final Map<dynamic, dynamic> data =
+        snapshot.value as Map<dynamic, dynamic>;
         final List<ConversationReport> loadedReports = [];
 
-        // 각 시간 키(child) 순회
         data.forEach((key, value) {
           if (value is Map<dynamic, dynamic>) {
             final reportData = Map<String, dynamic>.from(value);
@@ -44,7 +44,6 @@ class _ReportListScreenState extends State<ReportListScreen> {
           }
         });
 
-        // 최신순 정렬
         loadedReports.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
         setState(() {
@@ -66,56 +65,116 @@ class _ReportListScreenState extends State<ReportListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('지난 통화 리포트')),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : reports.isEmpty
-          ? const Center(child: Text('저장된 리포트가 없습니다.'))
-          : ListView.builder(
-        padding: const EdgeInsets.all(12),
-        itemCount: reports.length,
-        itemBuilder: (context, index) {
-          final report = reports[index];
-          final createdAt = report.createdAt;
-          final formattedDate =
-              "${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')} "
-              "${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}:${createdAt.second.toString().padLeft(2, '0')}";
-
-          return Card(
-            elevation: 2,
-            margin: const EdgeInsets.symmetric(vertical: 8),
-            child: ListTile(
-              leading: report.imageUrl.isNotEmpty
-                  ? ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.network(
-                  report.imageUrl,
-                  width: 50,
-                  height: 50,
-                  fit: BoxFit.cover,
-                ),
-              )
-                  : const Icon(Icons.chat_bubble_outline),
-              title: Text(
-                formattedDate, // 날짜 + 시간
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              subtitle: Text(
-                report.summary,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ReportScreen(report: report),
+      backgroundColor: Colors.transparent,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Color(0xFFFFF7E9),
+              Color(0xFFFFF3DC),
+              Color(0xFFF7D59C),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              const AppHeader(title: '지난 통화 리포트', showBackButton: true),
+              Expanded(
+                child: isLoading
+                    ? const Center(
+                  child: CircularProgressIndicator(
+                    color: Color(0xFFFFB74D),
                   ),
-                );
-              },
-            ),
-          );
-        },
+                )
+                    : reports.isEmpty
+                    ? const Center(
+                  child: Text(
+                    '저장된 리포트가 없습니다.',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Color(0xFF5D4037),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                )
+                    : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: reports.length,
+                  itemBuilder: (context, index) {
+                    final report = reports[index];
+                    final createdAt = report.createdAt;
+                    final formattedDate =
+                        "${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')} "
+                        "${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}";
+
+                    return Card(
+                      color: Colors.white,
+                      elevation: 3,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      margin:
+                      const EdgeInsets.symmetric(vertical: 8),
+                      child: ListTile(
+                        contentPadding:
+                        const EdgeInsets.all(12),
+                        leading: report.imageUrl.isNotEmpty
+                            ? ClipRRect(
+                          borderRadius:
+                          BorderRadius.circular(8),
+                          child: Image.network(
+                            report.imageUrl,
+                            width: 50,
+                            height: 50,
+                            fit: BoxFit.cover,
+                          ),
+                        )
+                            : const Icon(
+                          Icons.chat_bubble_outline_rounded,
+                          color: Color(0xFFFF7043),
+                          size: 36,
+                        ),
+                        title: Text(
+                          formattedDate,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF5D4037),
+                          ),
+                        ),
+                        subtitle: Text(
+                          report.summary,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.black54,
+                            fontSize: 14,
+                          ),
+                        ),
+                        trailing: const Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          color: Color(0xFFFFB74D),
+                          size: 18,
+                        ),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  ReportScreen(report: report),
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
