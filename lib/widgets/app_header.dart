@@ -65,7 +65,7 @@ class AppHeader extends StatelessWidget {
                       () {
                     showDialog(
                       context: context,
-                      builder: (_) => const CharacterSettingsDialog(),
+                      builder: (_) => CharacterSettingsDialog(childName: userName ?? "이름없음"),
                     );
                   },
             ),

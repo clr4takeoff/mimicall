@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'main_screen.dart';
 import '../utils/user_info.dart';
 
@@ -14,8 +15,9 @@ class _NameLandingScreenState extends State<NameLandingScreen> {
   final _controller = TextEditingController();
   final _database = FirebaseDatabase.instance.ref();
   bool _showError = false;
+  bool _isSaving = false;
 
-  void _saveName() async {
+  Future<void> _saveName() async {
     final name = _controller.text.trim();
 
     if (name.isEmpty) {
@@ -30,21 +32,38 @@ class _NameLandingScreenState extends State<NameLandingScreen> {
       return;
     }
 
-    UserInfo.name = name;
-    final now = DateTime.now();
-    await _database.child('users/$name').set({
-      'createdAt': now.toIso8601String(),
-    });
+    setState(() => _isSaving = true);
 
-    if (mounted) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => MainScreen(userName: name)),
+    try {
+      // 1. UserInfo에 저장
+      UserInfo.name = name;
+
+      // 2. SharedPreferences에 저장 → 다음 실행 시 자동 로드됨
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('userName', name);
+
+      // 3. Firebase에도 기록
+      final now = DateTime.now();
+      await _database.child('users/$name').set({
+        'createdAt': now.toIso8601String(),
+      });
+
+      // 4. 메인화면으로 이동
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => MainScreen(userName: name)),
+        );
+      }
+    } catch (e) {
+      debugPrint('이름 저장 오류: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('저장 중 오류가 발생했습니다: $e')),
       );
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
-
-  String _twoDigits(int n) => n.toString().padLeft(2, '0');
 
   @override
   Widget build(BuildContext context) {
@@ -94,8 +113,8 @@ class _NameLandingScreenState extends State<NameLandingScreen> {
                     ),
                     fillColor: Colors.white,
                     filled: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                        vertical: 18, horizontal: 16),
+                    contentPadding:
+                    const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(20),
                       borderSide: BorderSide(
@@ -135,7 +154,7 @@ class _NameLandingScreenState extends State<NameLandingScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _saveName,
+                    onPressed: _isSaving ? null : _saveName,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFFFB74D),
                       shape: RoundedRectangleBorder(
@@ -144,7 +163,11 @@ class _NameLandingScreenState extends State<NameLandingScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 18),
                       elevation: 2,
                     ),
-                    child: const Text(
+                    child: _isSaving
+                        ? const CircularProgressIndicator(
+                      color: Colors.white,
+                    )
+                        : const Text(
                       '시작하기',
                       style: TextStyle(
                         fontSize: 20,

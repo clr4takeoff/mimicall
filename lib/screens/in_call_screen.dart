@@ -5,6 +5,9 @@ import '../services/stt_service.dart';
 import '../services/tts_service.dart';
 import '../services/llm_service.dart';
 import '../services/conversation_service.dart';
+import '../utils/user_info.dart';
+import '../services/character_settings_service.dart';
+import '../models/character_settings_model.dart';
 
 
 class InCallScreen extends StatefulWidget {
@@ -20,6 +23,7 @@ class _InCallScreenState extends State<InCallScreen> {
   bool isFairyMode = false; // 요정 모드 상태
   String dummySpeech = "메타몽 목이 너무 말라... 근데 뭐라고 말해야 할지 모르겠어 😥";
   String childSpeech = "";
+  CharacterSettings? _characterSettings;
 
   late STTService _sttService;
   late TTSService _ttsService;
@@ -27,6 +31,7 @@ class _InCallScreenState extends State<InCallScreen> {
   @override
   void initState() {
     super.initState();
+    _loadCharacterSettings();
     _sttService = STTService(callId: "test_call_001");
     _ttsService = TTSService();
 
@@ -47,11 +52,14 @@ class _InCallScreenState extends State<InCallScreen> {
           text: text,
         );
 
-        // 2️⃣ LLM 호출
+        // 2️⃣ 캐릭터 설정을 LLM 프롬프트에 반영
         final reply = await gpt.sendMessageToLLM(
           text,
-          // context: widget.contextText,
+          context: _characterSettings?.contextText,
+          style: _characterSettings?.speakingStyle,
+          targetSpeechCount: _characterSettings?.targetSpeechCount,
         );
+
 
         // 3️⃣ AI 응답 저장
         await conv.saveMessage(
@@ -60,18 +68,17 @@ class _InCallScreenState extends State<InCallScreen> {
           text: reply,
         );
 
-        // 4️⃣ UI 표시
+        // 4️⃣ 화면에 표시
         setState(() {
           dummySpeech = reply.isNotEmpty
               ? reply
               : "메타몽이 뭐라고 해야 할지 모르겠대요 😅";
         });
 
-        // ✅ 5️⃣ TTS로 AI 답변 읽기
+        // 5️⃣ 캐릭터 음성으로 읽기
         if (reply.isNotEmpty) {
-          await _sttService.stopListening(tempStop: true); // STT 잠시 중단
-          await _ttsService.speak(reply);                  // 음성 재생
-          await _sttService.startListening();              // 재생 끝나면 STT 재개
+          await _sttService.stopListening(tempStop: true);
+          await _sttService.startListening();
         }
       }
     };
@@ -91,6 +98,28 @@ class _InCallScreenState extends State<InCallScreen> {
     _ttsService.stop();
     super.dispose();
   }
+
+  Future<void> _loadCharacterSettings() async {
+    try {
+      final childName = UserInfo.name; // 로그인 후 저장된 아이 이름
+      if (childName == null) return;
+
+      final service = CharacterSettingsService();
+      final settings = await service.loadCharacterSettings(childName);
+
+      if (settings != null) {
+        setState(() {
+          _characterSettings = settings;
+        });
+        debugPrint("캐릭터 설정 불러옴: ${settings.toJson()}");
+      } else {
+        debugPrint("캐릭터 설정이 존재하지 않습니다.");
+      }
+    } catch (e) {
+      debugPrint("캐릭터 설정 불러오기 실패: $e");
+    }
+  }
+
 
   /// 통화 종료 시 리포트 화면으로 이동
   void _onEndCall() async {
