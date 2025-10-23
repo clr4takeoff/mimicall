@@ -65,7 +65,7 @@ class IncomingCallScreen extends StatelessWidget {
                 ),
                 SizedBox(height: 8),
                 Text(
-                  "수신 중...",
+                  "전화가 걸려오고 있어요!",
                   style: TextStyle(color: Colors.white70, fontSize: 18),
                 ),
               ],

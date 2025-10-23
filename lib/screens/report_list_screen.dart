@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import '../models/report_model.dart';
+import '../utils/user_info.dart';
 import 'report_screen.dart';
 
 class ReportListScreen extends StatefulWidget {
@@ -22,19 +23,28 @@ class _ReportListScreenState extends State<ReportListScreen> {
 
   Future<void> _loadReports() async {
     try {
-      final ref = FirebaseDatabase.instance.ref('reports');
+      final userName = UserInfo.name ?? "unknown";
+      final ref = FirebaseDatabase.instance.ref('reports/$userName');
       final snapshot = await ref.get();
 
       if (snapshot.exists) {
         final Map<dynamic, dynamic> data = snapshot.value as Map<dynamic, dynamic>;
 
-        // 데이터 맵을 ConversationReport 리스트로 변환
-        final loadedReports = data.entries.map((entry) {
-          final Map<String, dynamic> value = Map<String, dynamic>.from(entry.value);
-          return ConversationReport.fromJson(value);
-        }).toList();
+        final List<ConversationReport> loadedReports = [];
 
-        // 날짜 최신순 정렬
+        // 각 시간 키(child) 순회
+        data.forEach((key, value) {
+          if (value is Map<dynamic, dynamic>) {
+            final reportData = Map<String, dynamic>.from(value);
+            try {
+              loadedReports.add(ConversationReport.fromJson(reportData));
+            } catch (e) {
+              debugPrint("Error parsing report $key: $e");
+            }
+          }
+        });
+
+        // 최신순 정렬
         loadedReports.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
         setState(() {
@@ -48,9 +58,7 @@ class _ReportListScreenState extends State<ReportListScreen> {
         });
       }
     } catch (e) {
-      setState(() {
-        isLoading = false;
-      });
+      setState(() => isLoading = false);
       debugPrint("Error loading reports: $e");
     }
   }
@@ -68,6 +76,11 @@ class _ReportListScreenState extends State<ReportListScreen> {
         itemCount: reports.length,
         itemBuilder: (context, index) {
           final report = reports[index];
+          final createdAt = report.createdAt;
+          final formattedDate =
+              "${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')} "
+              "${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}:${createdAt.second.toString().padLeft(2, '0')}";
+
           return Card(
             elevation: 2,
             margin: const EdgeInsets.symmetric(vertical: 8),
@@ -84,7 +97,7 @@ class _ReportListScreenState extends State<ReportListScreen> {
               )
                   : const Icon(Icons.chat_bubble_outline),
               title: Text(
-                "${report.createdAt.year}-${report.createdAt.month.toString().padLeft(2, '0')}-${report.createdAt.day.toString().padLeft(2, '0')}",
+                formattedDate, // 날짜 + 시간
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               subtitle: Text(
