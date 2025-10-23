@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'incoming_call_screen.dart';
 import 'report_list_screen.dart';
+import '../widgets/character_settings.dart';
 
 class MainScreen extends StatelessWidget {
   final String? userName;
@@ -19,12 +20,26 @@ class MainScreen extends StatelessWidget {
         ),
         centerTitle: true,
         elevation: 0,
+        actions: [
+          // 상단 우측에 설정 버튼 추가 (부모용)
+          IconButton(
+            icon: const Icon(Icons.settings_rounded, color: Colors.white),
+            tooltip: '캐릭터 설정',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (_) => const CharacterSettingsDialog(),
+              );
+            },
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(32.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // 🎥 영상 통화 시작
             _buildMenuButton(
               context,
               color: Colors.pinkAccent,
@@ -40,6 +55,8 @@ class MainScreen extends StatelessWidget {
               },
             ),
             const SizedBox(height: 24),
+
+            // 📋 지난 통화 리포트 보기
             _buildMenuButton(
               context,
               color: Colors.amber,
@@ -60,11 +77,13 @@ class MainScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildMenuButton(BuildContext context,
-      {required Color color,
+  Widget _buildMenuButton(
+      BuildContext context, {
+        required Color color,
         required IconData icon,
         required String label,
-        required VoidCallback onTap}) {
+        required VoidCallback onTap,
+      }) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(24),
@@ -73,11 +92,11 @@ class MainScreen extends StatelessWidget {
         decoration: BoxDecoration(
           color: color,
           borderRadius: BorderRadius.circular(24),
-          boxShadow: [
+          boxShadow: const [
             BoxShadow(
               color: Colors.black26,
               blurRadius: 8,
-              offset: const Offset(0, 4),
+              offset: Offset(0, 4),
             ),
           ],
         ),
