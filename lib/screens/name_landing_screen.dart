@@ -23,20 +23,16 @@ class _NameLandingScreenState extends State<NameLandingScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('이름을 입력해주세요.'),
-          backgroundColor: Colors.redAccent,
+          backgroundColor: Color(0xFFFF7043),
           duration: Duration(seconds: 2),
         ),
       );
       return;
     }
+
     UserInfo.name = name;
-
     final now = DateTime.now();
-    final formattedId =
-        '${now.year}-${_twoDigits(now.month)}-${_twoDigits(now.day)}_${_twoDigits(now.hour)}:${_twoDigits(now.minute)}:${_twoDigits(now.second)}';
-
-    await _database.child('users/$formattedId').set({
-      'name': name,
+    await _database.child('users/$name').set({
       'createdAt': now.toIso8601String(),
     });
 
@@ -53,108 +49,113 @@ class _NameLandingScreenState extends State<NameLandingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF3F7FF),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text(
-                '아동의 이름을 입력해주세요',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF37474F),
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                '입력하신 이름은 캐릭터가 아이를 부를 때 사용돼요 😊',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.black54,
-                ),
-              ),
-              const SizedBox(height: 40),
-
-              // 이름 입력창
-              TextField(
-                controller: _controller,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 20),
-                decoration: InputDecoration(
-                  hintText: '예: 지우, 수지, 에스더',
-                  hintStyle: TextStyle(
-                    color: Colors.grey.withOpacity(0.8),
-                    fontSize: 18,
-                  ), fillColor: Colors.white,
-                  contentPadding:
-                  const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    borderSide: BorderSide.none,
+      backgroundColor: const Color(0xFFFFF7E9),
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text(
+                  '이름을 입력해주세요',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF5D4037),
                   ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    borderSide: BorderSide(
-                      color: _showError
-                          ? Colors.redAccent
-                          : Colors.lightBlueAccent,
-                      width: 1.5,
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  '입력하신 이름은 캐릭터가 아이를 부를 때 사용돼요.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: Colors.brown,
+                  ),
+                ),
+                const SizedBox(height: 50),
+
+                // 이름 입력창
+                TextField(
+                  controller: _controller,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    color: Color(0xFF5D4037),
+                    fontWeight: FontWeight.w500,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: '예: 지우, 수지, 에스더',
+                    hintStyle: TextStyle(
+                      color: Colors.brown.withOpacity(0.4),
+                      fontSize: 18,
+                    ),
+                    fillColor: Colors.white,
+                    filled: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                        vertical: 18, horizontal: 16),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      borderSide: BorderSide(
+                        color: _showError
+                            ? Colors.redAccent
+                            : const Color(0xFFFFB74D),
+                        width: 1.5,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      borderSide: BorderSide(
+                        color: _showError
+                            ? Colors.redAccent
+                            : const Color(0xFFFF7043),
+                        width: 2,
+                      ),
                     ),
                   ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    borderSide: BorderSide(
-                      color: _showError ? Colors.redAccent : Colors.blueAccent,
-                      width: 2,
+                  onChanged: (_) {
+                    if (_showError) setState(() => _showError = false);
+                  },
+                ),
+
+                if (_showError)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8.0),
+                    child: Text(
+                      '이름을 입력해야 진행할 수 있습니다.',
+                      style: TextStyle(color: Colors.redAccent, fontSize: 14),
+                    ),
+                  ),
+
+                const SizedBox(height: 40),
+
+                // 시작 버튼
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _saveName,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFFB74D),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      elevation: 2,
+                    ),
+                    child: const Text(
+                      '시작하기',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                 ),
-                onChanged: (_) {
-                  if (_showError) setState(() => _showError = false);
-                },
-              ),
-
-              // 오류 메시지
-              if (_showError)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8.0),
-                  child: Text(
-                    '이름을 입력해야 진행할 수 있습니다.',
-                    style: TextStyle(color: Colors.redAccent, fontSize: 14),
-                  ),
-                ),
-
-              const SizedBox(height: 40),
-
-              // 시작 버튼
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _saveName,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.lightBlueAccent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 18),
-                    elevation: 3,
-                  ),
-                  child: const Text(
-                    '시작하기',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
