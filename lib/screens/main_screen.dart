@@ -21,7 +21,10 @@ class MainScreen extends StatelessWidget {
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const IncomingCallScreen()),
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        IncomingCallScreen(userName: userName), // 통화 화면
+                  ),
                 );
               },
             ),
@@ -33,7 +36,10 @@ class MainScreen extends StatelessWidget {
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const ReportListScreen()),
+                  MaterialPageRoute(
+                    builder: (_) =>
+                    const ReportListScreen(), // 리포트 목록 화면
+                  ),
                 );
               },
             ),

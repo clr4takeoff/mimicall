@@ -1,8 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'in_call_screen.dart';
 
 class IncomingCallScreen extends StatelessWidget {
-  const IncomingCallScreen({super.key});
+  final String? userName;
+
+  const IncomingCallScreen({super.key, this.userName});
+
+  Future<void> _createReportRecord(String userName) async {
+    final db = FirebaseDatabase.instance.ref();
+
+    final now = DateTime.now();
+    // Firebase 경로에 안전한 형식으로 변경
+    final safeKey =
+        "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}";
+
+    final reportRef = db.child('reports/$userName/$safeKey');
+
+    await reportRef.set({
+      'id': safeKey,
+      'summary': '',
+      'imageUrl': '',
+      'speechRatio': {},
+      'createdAt': now.toIso8601String(),
+      'conversation': [],
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -11,7 +34,7 @@ class IncomingCallScreen extends StatelessWidget {
       body: Stack(
         alignment: Alignment.center,
         children: [
-          // 배경 흐릿 캐릭터 (옵션)
+          // 배경 흐릿 캐릭터
           Positioned.fill(
             child: Opacity(
               opacity: 0.2,
@@ -71,7 +94,12 @@ class IncomingCallScreen extends StatelessWidget {
                 FloatingActionButton(
                   heroTag: 'accept',
                   backgroundColor: Colors.green,
-                  onPressed: () {
+                  onPressed: () async {
+                    // DB에 새 리포트 기록 생성
+                    final name = userName ?? "unknown";
+                    await _createReportRecord(name);
+
+                    // 통화 화면으로 이동
                     Navigator.pushReplacement(
                       context,
                       MaterialPageRoute(
