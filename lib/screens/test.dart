@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../models/gpt_response_model.dart'; // 또는 import 'services/gpt_response.dart';
+import '/services/llm_service.dart';
 
 class TestScreen extends StatefulWidget {
   const TestScreen({Key? key}) : super(key: key);
