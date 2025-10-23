@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../screens/main_screen.dart';
+import '../screens/report_list_screen.dart';
 
 class ReportActions extends StatelessWidget {
   const ReportActions({super.key});
@@ -38,10 +39,13 @@ class ReportActions extends StatelessWidget {
         // 이전 리포트 보기 버튼
         OutlinedButton(
           onPressed: () {
-            Navigator.pop(context); // 뒤로가기 or 이전 페이지로
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ReportListScreen()), // ✅ 수정됨
+            );
           },
           style: OutlinedButton.styleFrom(
-            foregroundColor: const Color(0xFF5D4037), // 텍스트 브라운
+            foregroundColor: const Color(0xFF5D4037),
             side: const BorderSide(color: Color(0xFFFFB74D), width: 2),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
