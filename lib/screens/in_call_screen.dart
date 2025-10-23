@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'report_screen.dart';
+import '../models/report_model.dart';
 
 class InCallScreen extends StatefulWidget {
   const InCallScreen({super.key});
@@ -49,7 +51,7 @@ class _InCallScreenState extends State<InCallScreen> {
               child: Image.asset(
                 isSpeaking
                     ? 'assets/character_talking.gif'
-                    : 'assets/characters/ditto.png', //dummy
+                    : 'assets/characters/ditto.png',
               ),
             ),
           ),
@@ -101,7 +103,21 @@ class _InCallScreenState extends State<InCallScreen> {
                   heroTag: 'end',
                   backgroundColor: Colors.redAccent,
                   onPressed: () {
-                    Navigator.pop(context);
+                    // 통화 종료 시 리포트 화면으로 이동
+                    final report = ConversationReport(
+                      id: DateTime.now().toIso8601String(),
+                      summary: "오늘 하츄핑과 즐거운 대화를 나눴어요!",
+                      imageUrl: "https://placekitten.com/400/300", // 임시 이미지
+                      speechRatio: {"아이": 60, "AI": 40},
+                      createdAt: DateTime.now(),
+                    );
+
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ReportScreen(report: report),
+                      ),
+                    );
                   },
                   child: const Icon(Icons.call_end, size: 36),
                 ),
