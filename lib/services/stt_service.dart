@@ -43,8 +43,8 @@ class STTService {
     await _recorder.start(
       path: filePath,
       encoder: AudioEncoder.aacLc,
-      bitRate: 96000, // 낮은 비트레이트로 비용 절감
-      samplingRate: 16000, // Whisper에 충분한 품질 (16kHz)
+      bitRate: 96000,
+      samplingRate: 16000,
       numChannels: 1,
     );
 
@@ -54,11 +54,13 @@ class STTService {
   /// 무음 감지 로직
   void _startSilenceDetection(String path) {
     debugPrint("[STT] 무음 감지 시작");
-    const silenceThreshold = -50.0; // 더 완화된 기준 (기존 -40)
+    const silenceThreshold = -50.0; // 무음 판단 기준
     const silenceDuration = Duration(seconds: 2);
     const checkInterval = Duration(milliseconds: 400);
 
     Duration silentFor = Duration.zero;
+    double maxDbDuringRecording = -120.0;
+    double minDbDuringRecording = 0.0;
     _silenceTimer?.cancel();
 
     _silenceTimer = Timer.periodic(checkInterval, (_) async {
@@ -67,31 +69,42 @@ class STTService {
       final amp = await _recorder.getAmplitude();
       final currentDb = amp.current ?? -120;
 
-      // debugPrint("[STT] 현재 dB: $currentDb");
+      // 최고/최저 dB 추적
+      if (currentDb > maxDbDuringRecording) maxDbDuringRecording = currentDb;
+      if (currentDb < minDbDuringRecording) minDbDuringRecording = currentDb;
 
+      // 무음 카운트
       if (currentDb < silenceThreshold) {
         silentFor += checkInterval;
       } else {
         silentFor = Duration.zero;
       }
 
-      // 연속 무음 지속 시간 초과 시
+      // 무음 지속 시 발화 종료로 간주
       if (silentFor >= silenceDuration) {
         _silenceTimer?.cancel();
         debugPrint("[STT] 무음 감지됨 → 녹음 중지 및 Whisper 요청");
-
         await stopListening(tempStop: true);
 
-        // 파일 길이 검증 후 전송
         final file = File(path);
         if (await file.exists()) {
           final length = await file.length();
-          if (length > 20000) { // 약 0.3초 이상
+          final dynamicRange = maxDbDuringRecording - minDbDuringRecording;
+
+          // 발화 유효성 판단
+          if (length > 8000 && dynamicRange > 6) {
+            debugPrint("[STT] 유효한 발화 감지 → Whisper 전송 "
+                "(len: $length, range: ${dynamicRange.toStringAsFixed(1)} dB)");
             await _sendToWhisper(path);
           } else {
-            debugPrint("[STT] 파일이 너무 짧아 무시됨 (${length} bytes)");
+            debugPrint("[STT] 무음/잡음으로 판단 → Whisper 생략 "
+                "(len: $length, range: ${dynamicRange.toStringAsFixed(1)} dB)");
           }
         }
+
+        // 초기화
+        maxDbDuringRecording = -120.0;
+        minDbDuringRecording = 0.0;
 
         if (!_isStopped) {
           debugPrint("[STT] 다음 입력 대기 중...");
@@ -101,7 +114,6 @@ class STTService {
       }
     });
   }
-
 
   /// Whisper API 호출
   Future<void> _sendToWhisper(String path) async {
@@ -125,7 +137,7 @@ class STTService {
     final request = http.MultipartRequest("POST", uri)
       ..headers["Authorization"] = "Bearer $apiKey"
       ..fields["model"] = "whisper-1"
-      ..fields["language"] = "ko" // 한국어 고정
+      ..fields["language"] = "ko"
       ..files.add(await http.MultipartFile.fromPath("file", path));
 
     debugPrint("[STT] Whisper 요청 시작...");
@@ -136,15 +148,30 @@ class STTService {
       final text =
           RegExp(r'"text":\s*"([^"]*)"').firstMatch(body)?.group(1)?.trim() ?? "";
 
-      // 한글, 영문, 숫자, 기본 문장부호만 남김
-      final clean = text.replaceAll(RegExp(r'[^가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z0-9\s.,!?]'), '').trim();
+      final clean = text
+          .replaceAll(RegExp(r'[^가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z0-9\s.,!?]'), '')
+          .trim();
 
-      if (clean.isNotEmpty && clean != _lastText) {
+      // 짧은 발화도 허용하지만 노이즈 방지 필터 적용
+      if (clean.isEmpty) {
+        debugPrint("[STT] 비어있는 텍스트 무시");
+        _isProcessing = false;
+        return;
+      }
+
+      // 노이즈 패턴 필터
+      if (clean.contains("뉴스") || clean.contains("이덕영") || clean.contains("구독")) {
+        debugPrint("[STT] 오인식된 문장 감지, 무시: $clean");
+        _isProcessing = false;
+        return;
+      }
+
+      if (clean != _lastText) {
         _lastText = clean;
         debugPrint("[STT 결과] $clean");
         onResult?.call(clean);
       } else {
-        debugPrint("[STT] 중복 혹은 비어있는 결과 무시");
+        debugPrint("[STT] 중복 결과 무시");
       }
     } else {
       debugPrint("[STT 오류] ${response.statusCode}: $body");
@@ -191,5 +218,4 @@ class STTService {
 
     debugPrint("[STT] 세션 완전 종료됨");
   }
-
 }

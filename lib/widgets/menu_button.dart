@@ -41,7 +41,7 @@ class MenuButton extends StatelessWidget {
             Text(
               label,
               style: const TextStyle(
-                fontSize: 22,
+                fontSize: 20,
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
               ),
