@@ -13,73 +13,77 @@ class GPTResponse {
   void initializeCharacterContext({
     required String context,
     required String style,
+    String? contextText,
     int targetSpeechCount = 5,
   }) {
-    String toneDescription;
-    switch (style) {
-      case "questioning":
-        toneDescription = "짧고 호기심 많은 질문 위주로 이야기해줘.";
-        break;
-      case "reflective":
-        toneDescription = "아이의 말을 공감하며 되짚어 주는 반응형 말투로 이야기해줘.";
-        break;
-      default:
-        toneDescription = "따뜻하고 칭찬해주는 말투로 이야기해줘.";
-        break;
-    }
 
     final systemPrompt = """
-너는 3세~7세 아동의 언어 발달을 돕는 AI 친구야.
-대화 상황: $context
-스타일: $toneDescription
-목표 발화 횟수: $targetSpeechCount회
-아이의 말은 스스로 이어가게 유도하고, 대답은 1문장 이하로 간단하게.
-""";
+      너는 3세~7세 아동의 언어 발달을 돕는 AI 친구야.
+      현재 캐릭터의 상황: ${contextText ?? "특별한 상황 설명 없음"}.
+      대화의 맥락: $context
+      목표는 아이가 자연스럽게 발화하도록 유도하는 거야.
+      - 대답은 한 문장 이내로 간단하게
+      - 따뜻하고 친근하게 말하기
+      - 아이가 말을 따라 하거나 대답하도록 유도해줘.
+      """;
 
     _conversationHistory.clear();
     _conversationHistory.add({"role": "system", "content": systemPrompt});
+
+    debugPrint("[GPT] 캐릭터 초기화 완료\n$systemPrompt");
   }
 
-  Future<String> sendMessageToLLM(String userMessage) async {
+
+  Future<String> sendMessageToLLM(String userMessage, {String? stageInstruction}) async {
     final apiKey = dotenv.env['OPENAI_API_KEY'] ?? '';
-    if (apiKey.isEmpty) {
-      debugPrint("API 키가 비어 있습니다.");
-      return "";
+    if (apiKey.isEmpty) return "";
+
+    // ✅ 단계 전환 시 systemPrompt 교체 + 로그 출력
+    if (stageInstruction != null) {
+      debugPrint("[GPT] 단계 지침 수신 → $stageInstruction");
+
+      _conversationHistory.removeWhere((m) => m["role"] == "system");
+      final newSystemPrompt = """
+너는 3세~7세 아동의 언어 발달을 돕는 AI 친구야.
+이전 단계의 대화는 끝났고, 지금은 새로운 단계야.
+현재 대화 단계: $stageInstruction
+- 아이가 자발적으로 말하도록 유도하고
+- 따뜻하고 간결하게 말해줘.
+""";
+
+      _conversationHistory.insert(0, {"role": "system", "content": newSystemPrompt});
+      debugPrint("[GPT] 새로운 systemPrompt 설정 완료:\n$newSystemPrompt");
     }
 
     _conversationHistory.add({"role": "user", "content": userMessage});
+    debugPrint("[GPT] 유저 입력: $userMessage");
 
-    try {
-      final response = await http.post(
-        _chatUrl,
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $apiKey",
-        },
-        body: jsonEncode({
-          "model": "gpt-4o-mini",
-          "messages": _conversationHistory,
-          "temperature": 0.7,
-          "max_tokens": 200,
-        }),
-      );
+    final response = await http.post(
+      _chatUrl,
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $apiKey",
+      },
+      body: jsonEncode({
+        "model": "gpt-4o-mini",
+        "messages": _conversationHistory,
+        "temperature": 0.6,
+        "max_tokens": 150,
+      }),
+    );
 
-      if (response.statusCode != 200) {
-        debugPrint("LLM 오류: ${response.body}");
-        return "";
-      }
-
-      final data = jsonDecode(response.body);
-      final reply = data["choices"][0]["message"]["content"] as String;
-
-      _conversationHistory.add({"role": "assistant", "content": reply});
-      debugPrint("LLM 응답: $reply");
-
-      return reply;
-    } catch (e) {
-      debugPrint("LLM 호출 오류: $e");
+    if (response.statusCode != 200) {
+      debugPrint("[GPT 오류] ${response.body}");
       return "";
     }
+
+    final data = jsonDecode(response.body);
+    final reply = data["choices"][0]["message"]["content"] as String;
+
+    _conversationHistory.add({"role": "assistant", "content": reply});
+
+    debugPrint("[GPT 응답] $reply");
+    return reply;
   }
 
   Future<String> generateAndSaveImageBase64({

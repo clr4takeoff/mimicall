@@ -105,19 +105,33 @@ class _InCallScreenState extends State<InCallScreen> {
         isSpeaking = true;
       });
 
-      final reply = await gpt.sendMessageToLLM(text);
+      // 1️⃣ 발화 카운트 업데이트
+      _conversation.registerUserSpeech(text);
+
+      // 2️⃣ 현재 대화 단계 문장 가져오기
+      final userName = UserInfo.name ?? "unknown";
+      final stageInstruction = await _conversation.getStageInstruction(username: userName);
+
+      // 3️⃣ GPT 호출 (단계 정보 포함)
+      final reply = await gpt.sendMessageToLLM(
+        text,
+        stageInstruction: stageInstruction,
+      );
+
       if (reply.isEmpty) return;
 
       setState(() => dummySpeech = reply);
 
       final now = DateTime.now();
+
+      // 4️⃣ Firebase에 대화 저장 (turnCount, stage 포함됨)
       await _conversation.saveMessage(
         dbPath: widget.dbPath,
         role: "user",
         text: text,
         timestamp: now,
       );
-      await Future.delayed(const Duration(milliseconds: 200)); // 순서 보정
+      await Future.delayed(const Duration(milliseconds: 200));
       await _conversation.saveMessage(
         dbPath: widget.dbPath,
         role: "assistant",
@@ -125,16 +139,15 @@ class _InCallScreenState extends State<InCallScreen> {
         timestamp: now.add(const Duration(milliseconds: 200)),
       );
 
-      // TTS 실행 전 STT 명시적 중지
+      // 5️⃣ TTS 실행 전 STT 중지
       await _sttService.stopListening(tempStop: true);
 
-      // TTS 실행
+      // 6️⃣ TTS 실행
       await _ttsService.speak(reply);
 
-      // TTS 완료 후 STT 다시 시작
+      // 7️⃣ TTS 완료 후 STT 재개
       await _sttService.startListening();
     };
-
   }
 
 
