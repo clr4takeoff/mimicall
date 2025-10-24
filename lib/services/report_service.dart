@@ -8,23 +8,30 @@ class ReportService {
   final llm = GPTResponse();
 
   Future<ConversationReport> generateReport(
-      String userName, String reportId) async {
-    final reportRef = db.child('reports/$userName/$reportId');
+      String userName, String reportId, String conversationPath) async {
+    // 리포트는 대화와 같은 경로에 저장
+    final reportRef = db.child(conversationPath);
+    final convRef = db.child('$conversationPath/conversation/messages');
 
     // 1️⃣ 대화 불러오기
-    final convSnap = await reportRef.child('conversation/messages').get();
+    final convSnap = await convRef.get();
     if (!convSnap.exists) {
-      print("[Report] 대화 데이터 없음");
+      print("[Report] 대화 데이터 없음 ($conversationPath)");
+      await reportRef.update({
+        'summary': '대화 데이터가 없습니다.',
+        'comment': '',
+      });
       return ConversationReport(
         id: reportId,
         summary: "대화가 없어요.",
         imageUrl: "",
         imageBase64: "",
-        speechRatio: {"아이": 0, "AI": 0},
+        speechRatio: {}, // 모델 정의상 남겨둠 (DB엔 안저장됨)
         createdAt: DateTime.now(),
       );
     }
 
+    // 2️⃣ 메시지 정리
     final messages = <Map<String, dynamic>>[];
     for (final entry in convSnap.children) {
       final value = Map<String, dynamic>.from(entry.value as Map);
@@ -38,7 +45,7 @@ class ReportService {
     messages.sort((a, b) =>
         a['timestamp'].toString().compareTo(b['timestamp'].toString()));
 
-    // 2️⃣ GPT 분석
+    // 3️⃣ GPT 분석 요청
     final prompt = _buildPrompt(messages);
     final response = await llm.fetchPromptResponse(
       "너는 언어치료 전문가야. 아이와 캐릭터의 대화를 분석해서 리포트를 작성해줘.",
@@ -47,25 +54,19 @@ class ReportService {
 
     final parsed = _safeParse(response);
 
-    // 3️⃣ DB 저장
+    // 4️⃣ 결과 저장 (summary + comment만)
     await reportRef.update({
       'summary': parsed['summary'],
-      'speechRatio': parsed['speechRatio'],
       'comment': parsed['comment'] ?? '',
-      'generatedAt': DateTime.now().toIso8601String(),
     });
 
-    // 4️⃣ ConversationReport 모델 생성 후 반환
+    // 5️⃣ 모델 반환 (speechRatio는 빈 맵)
     return ConversationReport(
       id: reportId,
       summary: parsed['summary'],
       imageUrl: "",
       imageBase64: "",
-      speechRatio: Map<String, double>.from(
-        (parsed['speechRatio'] as Map).map(
-              (key, value) => MapEntry(key.toString(), (value as num).toDouble()),
-        ),
-      ),
+      speechRatio: {},
       createdAt: DateTime.now(),
     );
   }
@@ -75,20 +76,16 @@ class ReportService {
         .map((m) => "${m['role'] == 'assistant' ? 'AI' : '아이'}: ${m['text']}")
         .join('\n');
     return '''
-        다음은 언어치료 세션 중 아이와 AI 캐릭터의 대화입니다.
-        이를 분석하여 JSON 형태의 리포트를 만들어주세요.
-        
-        형식 예시:
-        {
-          "summary": "오늘 대화의 요약",
-          "speechRatio": {"아이": 60, "AI": 40},
-          "comment": "아동의 발화가 늘었어요."
-        }
-        
-        대화:
-        $dialogue
-        ''';
-          }
+      다음은 언어치료 세션 중 아이와 AI 캐릭터의 대화입니다.
+      이를 분석하여 JSON 형태의 리포트를 만들어주세요.
+      {
+        "summary": "오늘 대화의 요약",
+        "comment": "아동의 발화 특징이나 대화 평가"
+      }
+      대화:
+      $dialogue
+    ''';
+  }
 
   Map<String, dynamic> _safeParse(String content) {
     try {
@@ -96,7 +93,6 @@ class ReportService {
     } catch (_) {
       return {
         'summary': content,
-        'speechRatio': {'아이': 50, 'AI': 50}, // 일단 더미데이터 넣어뒀는데 나중에 로직 구현 해야함
         'comment': '응답 파싱 실패',
       };
     }

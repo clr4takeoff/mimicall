@@ -167,7 +167,7 @@ class _InCallScreenState extends State<InCallScreen> {
     await _ttsService.dispose(); // 확실히 종료해주겠지?
 
     const bool useDalle = false;
-    const imagePrompt = "밝은 하늘 아래에서 메타몽이 미소 짓는 장면을 그려줘";
+    const imagePrompt = "밝은 하늘 아래에서 메타몽이 미소 짓는 장면을 그려줘"; // 더미라 나중에 바꿔야함
     String imageBase64 = "";
 
     showDialog(
@@ -217,10 +217,8 @@ class _InCallScreenState extends State<InCallScreen> {
     final userName = UserInfo.name ?? "unknown";
     final reportId = DateTime.now().toIso8601String().replaceAll('T', '_').split('.').first;
 
-    await reportService.generateReport(userName, reportId);
-
     // ReportService가 ConversationReport 반환
-    final report = await reportService.generateReport(userName, reportId);
+    final report = await reportService.generateReport(userName, reportId, widget.dbPath);
 
     if (context.mounted) Navigator.pop(context);
 
