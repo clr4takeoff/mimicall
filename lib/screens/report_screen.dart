@@ -4,6 +4,7 @@ import '../screens/main_screen.dart';
 import '../widgets/report_summary_box.dart';
 import '../widgets/report_actions.dart';
 import '../widgets/report_image.dart';
+import '../widgets/report_response_time.dart';
 
 class ReportScreen extends StatelessWidget {
   final ConversationReport report;
@@ -100,6 +101,10 @@ class ReportScreen extends StatelessWidget {
                         imageUrl: report.imageUrl,
                         imageBase64: report.imageBase64,
                       ),
+                      const SizedBox(height: 28),
+
+                      // 평균 반응 시간
+                      ReportResponseTime(report: report),
                       const SizedBox(height: 28),
 
                       // 요약 박스

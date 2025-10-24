@@ -26,6 +26,7 @@ class ReportService {
         summary: "대화가 없어요.",
         imageUrl: "",
         imageBase64: "",
+        averageResponseDelayMs: 0,
         createdAt: DateTime.now(),
       );
     }
@@ -83,6 +84,7 @@ class ReportService {
       summary: parsed['summary'],
       imageUrl: "",
       imageBase64: "",
+      averageResponseDelayMs: avgResponseDelay,
       createdAt: DateTime.now(),
     );
   }

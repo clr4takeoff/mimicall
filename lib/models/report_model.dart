@@ -4,12 +4,15 @@ class ConversationReport {
   final String imageUrl;
   final String? imageBase64;
   final DateTime createdAt;
+  final int? averageResponseDelayMs;
+
 
   ConversationReport({
     required this.id,
     required this.summary,
     required this.imageUrl,
     this.imageBase64,
+    this.averageResponseDelayMs,
     required this.createdAt,
   });
 
@@ -19,6 +22,7 @@ class ConversationReport {
       summary: json['summary'] ?? '',
       imageUrl: json['imageUrl'] ?? '',
       imageBase64: json['imageBase64'],
+      averageResponseDelayMs: json['averageResponseDelayMs'],
       createdAt: DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
     );
   }
@@ -29,6 +33,7 @@ class ConversationReport {
       'summary': summary,
       'imageUrl': imageUrl,
       'imageBase64': imageBase64,
+      'averageResponseDelayMs': averageResponseDelayMs,
       'createdAt': createdAt.toIso8601String(),
     };
   }
