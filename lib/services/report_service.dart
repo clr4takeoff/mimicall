@@ -8,7 +8,10 @@ class ReportService {
   final llm = GPTResponse();
 
   Future<ConversationReport> generateReport(
-      String userName, String reportId, String conversationPath) async {
+      String userName,
+      String reportId,
+      String conversationPath,
+      ) async {
     final reportRef = db.child(conversationPath);
     final convRef = db.child('$conversationPath/conversation/messages');
 
@@ -31,7 +34,7 @@ class ReportService {
       );
     }
 
-    // 2️⃣ 메시지 정리 + responseDelay 수집
+    // 2️⃣ 메시지 정리 + 반응시간 수집
     final messages = <Map<String, dynamic>>[];
     final responseDelays = <int>[];
 
@@ -59,10 +62,9 @@ class ReportService {
         ? 0
         : (responseDelays.reduce((a, b) => a + b) ~/ responseDelays.length);
 
-    print("[Report] 평균 반응 시간: ${avgResponseDelay}ms "
-        "(${(avgResponseDelay / 1000).toStringAsFixed(2)}초)");
+    print("[Report] 평균 반응 시간: ${avgResponseDelay}ms");
 
-    // 4️⃣ GPT 분석 요청
+    // 4️⃣ GPT 분석
     final prompt = _buildPrompt(messages, avgResponseDelay);
     final response = await llm.fetchPromptResponse(
       "너는 언어치료 전문가야. 아이와 캐릭터의 대화를 분석해서 리포트를 작성해줘.",
@@ -71,17 +73,20 @@ class ReportService {
 
     final parsed = _safeParse(response);
 
-    // 5️⃣ 결과 저장 (summary + comment + 평균 반응 시간)
+    // 5️⃣ 기존 데이터가 있어도 덮어쓰기
     await reportRef.update({
-      'summary': parsed['summary'],
+      'summary': parsed['summary'] ?? '요약 없음',
       'comment': parsed['comment'] ?? '',
       'averageResponseDelayMs': avgResponseDelay,
+      'updatedAt': DateTime.now().toIso8601String(),
     });
+
+    print("[Report] 리포트 저장(덮어쓰기) 완료 → $conversationPath");
 
     // 6️⃣ 모델 반환
     return ConversationReport(
       id: reportId,
-      summary: parsed['summary'],
+      summary: parsed['summary'] ?? '요약 없음',
       imageUrl: "",
       imageBase64: "",
       averageResponseDelayMs: avgResponseDelay,
@@ -93,13 +98,12 @@ class ReportService {
     final dialogue = messages
         .map((m) => "${m['role'] == 'assistant' ? 'AI' : '아이'}: ${m['text']}")
         .join('\n');
-
     final avgDelaySec = (avgDelayMs / 1000).toStringAsFixed(2);
 
     return '''
       다음은 언어치료 세션 중 아이와 AI 캐릭터의 대화입니다.
       아이의 평균 반응 시간은 약 ${avgDelaySec}초입니다.
-      이 정보를 참고하여 리포트를 작성하세요.
+      이를 참고하여 리포트를 작성해주세요.
 
       JSON 형태로 응답해주세요:
       {
@@ -118,7 +122,6 @@ class ReportService {
           .replaceAll(RegExp(r'```json', caseSensitive: false), '')
           .replaceAll('```', '')
           .trim();
-
       return jsonDecode(cleaned);
     } catch (e) {
       print("[Report] JSON 파싱 실패: $e\n원본: $content");
