@@ -1,57 +1,94 @@
 import 'dart:convert';
 import 'package:firebase_database/firebase_database.dart';
-import 'llm_service.dart'; // GPT 호출 모듈 불러오기
+import '../models/report_model.dart';
+import 'llm_service.dart';
 
 class ReportService {
   final db = FirebaseDatabase.instance.ref();
-  final llm = GPTResponse(); // GPT 호출 클래스
+  final llm = GPTResponse();
 
-  Future<void> generateReport(String userName, String reportId) async {
+  Future<ConversationReport> generateReport(
+      String userName, String reportId) async {
     final reportRef = db.child('reports/$userName/$reportId');
 
-    // conversation 데이터 가져오기
-    final snapshot = await reportRef.child('conversation').get();
-    if (!snapshot.exists) return;
+    // 1️⃣ 대화 불러오기
+    final convSnap = await reportRef.child('conversation/messages').get();
+    if (!convSnap.exists) {
+      print("[Report] 대화 데이터 없음");
+      return ConversationReport(
+        id: reportId,
+        summary: "대화가 없어요.",
+        imageUrl: "",
+        imageBase64: "",
+        speechRatio: {"아이": 0, "AI": 0},
+        createdAt: DateTime.now(),
+      );
+    }
 
-    final conversation = List<Map>.from(snapshot.value as List);
+    final messages = <Map<String, dynamic>>[];
+    for (final entry in convSnap.children) {
+      final value = Map<String, dynamic>.from(entry.value as Map);
+      messages.add({
+        "role": value['role'],
+        "text": value['text'],
+        "timestamp": value['timestamp'],
+      });
+    }
 
-    // GPT 요청 생성
-    final prompt = _buildPrompt(conversation);
+    messages.sort((a, b) =>
+        a['timestamp'].toString().compareTo(b['timestamp'].toString()));
 
-    // LLM 서비스 호출
+    // 2️⃣ GPT 분석
+    final prompt = _buildPrompt(messages);
     final response = await llm.fetchPromptResponse(
-      "너는 언어치료 전문가야. 부모와 아동의 대화를 분석해서 발달지표를 만들어줘.",
+      "너는 언어치료 전문가야. 아이와 캐릭터의 대화를 분석해서 리포트를 작성해줘.",
       prompt,
     );
 
-    // GPT 응답 파싱 (JSON 예상)
     final parsed = _safeParse(response);
 
-    // DB 업데이트
+    // 3️⃣ DB 저장
     await reportRef.update({
       'summary': parsed['summary'],
       'speechRatio': parsed['speechRatio'],
+      'comment': parsed['comment'] ?? '',
+      'generatedAt': DateTime.now().toIso8601String(),
     });
+
+    // 4️⃣ ConversationReport 모델 생성 후 반환
+    return ConversationReport(
+      id: reportId,
+      summary: parsed['summary'],
+      imageUrl: "",
+      imageBase64: "",
+      speechRatio: Map<String, double>.from(
+        (parsed['speechRatio'] as Map).map(
+              (key, value) => MapEntry(key.toString(), (value as num).toDouble()),
+        ),
+      ),
+      createdAt: DateTime.now(),
+    );
   }
 
-  String _buildPrompt(List<Map> conversation) {
-    final text = conversation.map((m) => "${m['speaker']}: ${m['text']}").join('\n');
+  String _buildPrompt(List<Map<String, dynamic>> messages) {
+    final dialogue = messages
+        .map((m) => "${m['role'] == 'assistant' ? 'AI' : '아이'}: ${m['text']}")
+        .join('\n');
     return '''
-다음은 부모와 아동의 대화입니다. 이를 바탕으로 JSON 형식의 리포트를 만들어주세요.
-
-{
-  "summary": "오늘 대화의 요약",
-  "speechRatio": {
-    "아동": 70,
-    "부모": 30
-  },
-  "comment": "아동이 표현을 잘하지만 문장 구조가 짧아요. 문장 확장을 유도해주세요."
-}
-
-대화:
-$text
-    ''';
-  }
+        다음은 언어치료 세션 중 아이와 AI 캐릭터의 대화입니다.
+        이를 분석하여 JSON 형태의 리포트를 만들어주세요.
+        
+        형식 예시:
+        {
+          "summary": "오늘 대화의 요약",
+          "speechRatio": {"아이": 60, "AI": 40},
+          "comment": "아동의 발화가 늘었어요."
+        }
+        
+        대화:
+        $dialogue
+        ''';
+          }
 
   Map<String, dynamic> _safeParse(String content) {
     try {
@@ -59,7 +96,8 @@ $text
     } catch (_) {
       return {
         'summary': content,
-        'speechRatio': {'아동': 50, '부모': 50},
+        'speechRatio': {'아이': 50, 'AI': 50}, // 일단 더미데이터 넣어뒀는데 나중에 로직 구현 해야함
+        'comment': '응답 파싱 실패',
       };
     }
   }

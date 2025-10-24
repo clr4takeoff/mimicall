@@ -150,4 +150,46 @@ class GPTResponse {
     debugPrint("Firebase 저장 완료 → $safePath");
     return base64Data;
   }
+
+  Future<String> fetchPromptResponse(String systemPrompt, String userPrompt) async {
+    final apiKey = dotenv.env['OPENAI_API_KEY'] ?? '';
+    if (apiKey.isEmpty) {
+      debugPrint("[GPT] API 키가 없습니다.");
+      return "";
+    }
+
+    try {
+      final response = await http.post(
+        _chatUrl,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $apiKey",
+        },
+        body: jsonEncode({
+          "model": "gpt-4o-mini",
+          "messages": [
+            {"role": "system", "content": systemPrompt},
+            {"role": "user", "content": userPrompt},
+          ],
+          "temperature": 0.7,
+          "max_tokens": 400,
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        debugPrint("[GPT 오류] ${response.body}");
+        return "";
+      }
+
+      final data = jsonDecode(response.body);
+      final content = data["choices"][0]["message"]["content"] as String;
+      debugPrint("[GPT 리포트 응답] $content");
+
+      return content;
+    } catch (e) {
+      debugPrint("[GPT 예외] $e");
+      return "";
+    }
+  }
+
 }

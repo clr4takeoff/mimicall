@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'report_screen.dart';
-import '../models/report_model.dart';
 import '../services/stt_service.dart';
 import '../services/tts_service.dart';
 import '../services/llm_service.dart';
+import '../services/report_service.dart';
 import '../services/conversation_service.dart';
 import '../utils/user_info.dart';
 import '../services/character_settings_service.dart';
 import '../models/character_settings_model.dart';
+
 
 class InCallScreen extends StatefulWidget {
   final String dbPath;
@@ -65,7 +66,6 @@ class _InCallScreenState extends State<InCallScreen> {
     // 발화 끝나면 STT 시작
     await _sttService.startListening();
   }
-
 
 
   Future<void> _loadCharacterSettings() async {
@@ -199,15 +199,19 @@ class _InCallScreenState extends State<InCallScreen> {
     }
 
     if (!mounted) return;
-    final report = ConversationReport(
-      id: DateTime.now().toIso8601String().replaceAll('T', '_').split('.').first,
-      summary: "오늘 메타몽과 즐거운 대화를 나눴어요.",
-      imageUrl: "",
-      imageBase64: imageBase64,
-      speechRatio: {"아이": 60, "AI": 40},
-      createdAt: DateTime.now(),
-    );
 
+    final reportService = ReportService();
+    final userName = UserInfo.name ?? "unknown";
+    final reportId = DateTime.now().toIso8601String().replaceAll('T', '_').split('.').first;
+
+    await reportService.generateReport(userName, reportId);
+
+    // ReportService가 ConversationReport 반환
+    final report = await reportService.generateReport(userName, reportId);
+
+    if (context.mounted) Navigator.pop(context);
+
+    // ReportScreen으로 전달
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (_) => ReportScreen(report: report)),
@@ -232,9 +236,14 @@ class _InCallScreenState extends State<InCallScreen> {
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFFB3E5FC), Color(0xFFD1C4E9)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFFFFEFD5),
+              Color(0xFFFFDAB9),
+              Color(0xFFFAD0C4),
+              Color(0xFFD1C4E9),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
         ),
         child: Stack(

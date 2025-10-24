@@ -41,6 +41,7 @@ dependencies:
   record: 4.4.4
   path_provider: ^2.1.1
   just_audio: ^0.9.38
+  flutter_launcher_icons: ^0.13.1
 
 
   # The following adds the Cupertino Icons font to your application.
@@ -69,6 +70,7 @@ flutter:
     - .env
     - assets/characters/
 
+
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 
@@ -94,3 +96,6 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+flutter_icons:
+  android: true
+  image_path: "assets/icons/icon.png"
