@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import '../models/character_settings_model.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/character_settings_service.dart';
-import 'package:firebase_database/firebase_database.dart';
 
 class CharacterSettingsDialog extends StatefulWidget {
-  final String childName; // UserInfo에서 전달받는 아이 이름
+  final String childName;
 
   const CharacterSettingsDialog({
     super.key,
@@ -26,6 +25,7 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
     imagePath: '기본 캐릭터',
     voicePath: '기본 음성',
     contextText: '없음',
+    targetSpeech: '',
   );
 
   @override
@@ -34,7 +34,6 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
     _loadCharacterSettings();
   }
 
-  // DB에서 기존 캐릭터 설정 불러오기
   Future<void> _loadCharacterSettings() async {
     try {
       final savedSettings =
@@ -67,9 +66,7 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Center(
-        child: CircularProgressIndicator(
-          color: Color(0xFFFFB74D),
-        ),
+        child: CircularProgressIndicator(color: Color(0xFFFFB74D)),
       );
     }
 
@@ -109,32 +106,36 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
                 style: const TextStyle(color: Colors.black54, fontSize: 13),
               ),
               onTap: () {
-                // TODO: 음성 설정 로직 연결
+                // TODO: 음성 설정 로직
               },
             ),
             const Divider(thickness: 0.8),
 
-            // 대화 주제 / 상황
+            // 대화 주제 / 상황 + 목표 발화 설정
             ListTile(
               leading: const Icon(Icons.chat_bubble_outline_rounded,
                   color: Color(0xFF91b32e)),
-              title: const Text('대화 주제 / 상황 설정'),
+              title: const Text('대화 상황 / 목표 발화 설정'),
               subtitle: Text(
-                '현재: ${settings.contextText}',
+                '상황: ${settings.contextText}\n목표 발화: ${settings.targetSpeech.isEmpty ? "없음" : settings.targetSpeech}',
                 style: const TextStyle(color: Colors.black54, fontSize: 13),
               ),
               onTap: () async {
-                final result = await _showContextInputDialog(context);
-                if (result != null && result.isNotEmpty) {
+                final result = await _showContextAndTargetDialog(context);
+                if (result != null) {
                   setState(() {
-                    settings = settings.copyWith(contextText: result);
+                    settings = settings.copyWith(
+                      contextText: result['contextText'] ?? settings.contextText,
+                      targetSpeech:
+                      result['targetSpeech'] ?? settings.targetSpeech,
+                    );
                   });
                 }
               },
             ),
             const Divider(thickness: 0.8),
 
-            // 대화 스타일 선택
+            // 대화 스타일
             ListTile(
               leading: const Icon(Icons.psychology, color: Color(0xFF8E24AA)),
               title: const Text('대화 스타일'),
@@ -232,32 +233,74 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
     );
   }
 
-  // 대화 주제 입력 다이얼로그
-  Future<String?> _showContextInputDialog(BuildContext context) async {
-    final controller = TextEditingController(text: settings.contextText);
-    return showDialog<String>(
+// 상황 + 목표 발화 입력 다이얼로그
+  Future<Map<String, String>?> _showContextAndTargetDialog(
+      BuildContext context) async {
+    final contextController = TextEditingController(text: settings.contextText);
+    final targetController = TextEditingController(text: settings.targetSpeech);
+
+    return showDialog<Map<String, String>>(
       context: context,
       builder: (_) {
         return AlertDialog(
           backgroundColor: const Color(0xFFFFF7E9),
-          shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Text(
-            '대화 주제 / 상황 입력',
+            '상황과 목표 발화 설정',
             style: TextStyle(
               fontWeight: FontWeight.bold,
               color: Color(0xFF5D4037),
             ),
           ),
-          content: TextField(
-            controller: controller,
-            maxLines: 3,
-            decoration: InputDecoration(
-              hintText: '예: 오늘 기분 이야기하기, 친구와 놀았던 일 등',
-              hintStyle: const TextStyle(color: Colors.black38),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+          contentPadding: EdgeInsets.zero, // (1) 기본 여백 제거
+          content: SingleChildScrollView( // (2) 스크롤 허용
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '🪄 아이가 연습할 발화 상황',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF5D4037),
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: contextController,
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    hintText: '예: 목말라서 물을 마시고 싶은데 물을 달라고 말하지 못하는 상황',
+                    hintStyle: const TextStyle(color: Colors.black38),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  '🎯 아이가 말하길 원하는 문장',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF5D4037),
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: targetController,
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    hintText: '예: 물 주세요, 물 마실래요',
+                    hintStyle: const TextStyle(color: Colors.black38),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           actions: [
@@ -268,7 +311,12 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFFFB74D)),
-              onPressed: () => Navigator.pop(context, controller.text),
+              onPressed: () {
+                Navigator.pop(context, {
+                  'contextText': contextController.text,
+                  'targetSpeech': targetController.text,
+                });
+              },
               child: const Text('확인'),
             ),
           ],
@@ -276,6 +324,7 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
       },
     );
   }
+
 
   // 대화 스타일 선택 다이얼로그
   Future<String?> _showSpeakingStyleDialog(BuildContext context) async {

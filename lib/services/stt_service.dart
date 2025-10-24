@@ -160,7 +160,7 @@ class STTService {
       }
 
       // 노이즈 패턴 필터
-      if (clean.contains("뉴스") || clean.contains("이덕영") || clean.contains("구독")) {
+      if (clean.contains("뉴스") || clean.contains("이덕영") || clean.contains("구독")|| clean.contains("시청")) {
         debugPrint("[STT] 오인식된 문장 감지, 무시: $clean");
         _isProcessing = false;
         return;

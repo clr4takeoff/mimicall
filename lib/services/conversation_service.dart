@@ -8,14 +8,11 @@ class ConversationService {
   final STTService stt;
   final TTSService tts;
 
-  // 아이 발화 카운트
-  int turnCount = 0;
+  int turnCount = 0; // 아이 발화 카운트
+  int conversationStage = 1; // 1=라포, 2=도움요청, 3=마무리
+  String? contextText; // Firebase에서 불러올 캐릭터 상황
 
-  // 대화 단계 (1=라포, 2=도움요청, 3=마무리)
-  int conversationStage = 1;
-
-  // 캐릭터 상황 (Firebase에서 불러올 contextText)
-  String? contextText;
+  bool isFairyMode = false; // 요정 모드 여부
 
   ConversationService({
     required this.stt,
@@ -59,6 +56,17 @@ class ConversationService {
     await stt.initialize();
   }
 
+  // 요정 모드 제어
+  void enableFairyMode() {
+    isFairyMode = true;
+    debugPrint("[Conversation] 요정 모드 활성화");
+  }
+
+  void disableFairyMode() {
+    isFairyMode = false;
+    debugPrint("[Conversation] 요정 모드 비활성화");
+  }
+
   // 대화 단계 갱신 로직
   void _updateConversationStage() {
     if (turnCount < 3) {
@@ -72,6 +80,10 @@ class ConversationService {
 
   // 단계별 프롬프트 반환
   Future<String> getStageInstruction({required String username}) async {
+    if (isFairyMode) {
+      return "현재 요정 모드가 활성화되어 있어. 캐릭터는 대화하지 않고 요정이 아이의 발화를 도와주는 중이야.";
+    }
+
     if (conversationStage == 2) {
       if (contextText == null) {
         await loadCharacterContext(username);
@@ -93,7 +105,15 @@ class ConversationService {
   void registerUserSpeech(String userText) {
     if (userText.trim().isEmpty) return;
 
+    // turnCount는 항상 증가 (요정 모드에서도)
     turnCount++;
+
+    // 요정 모드일 경우 대화 단계는 고정
+    if (isFairyMode) {
+      debugPrint("[Conversation] 요정 모드 중: turnCount 증가, 단계 변경은 생략됨");
+      return;
+    }
+
     final prevStage = conversationStage;
     _updateConversationStage();
 

@@ -8,6 +8,8 @@ import '../services/conversation_service.dart';
 import '../utils/user_info.dart';
 import '../services/character_settings_service.dart';
 import '../models/character_settings_model.dart';
+import '../services/fairy_service.dart';
+
 
 
 class InCallScreen extends StatefulWidget {
@@ -23,6 +25,8 @@ class _InCallScreenState extends State<InCallScreen> {
   bool isSpeaking = false;
   bool isFairyMode = false;
   bool _isEndingCall = false;
+  bool _isFairyButtonEnabled = false;
+
   String dummySpeech = "메타몽 목이 너무 말라... 근데 뭐라고 말해야 할지 모르겠어.";
   String childSpeech = "";
   CharacterSettings? _characterSettings;
@@ -30,6 +34,7 @@ class _InCallScreenState extends State<InCallScreen> {
 
   late STTService _sttService;
   late TTSService _ttsService;
+  late FairyService _fairyService;
   final GPTResponse gpt = GPTResponse();
 
   late ConversationService _conversation;
@@ -40,6 +45,7 @@ class _InCallScreenState extends State<InCallScreen> {
     _sttService = STTService(callId: "test_call_001");
     _ttsService = TTSService();
     _conversation = ConversationService(stt: _sttService, tts: _ttsService);
+    _fairyService = FairyService(tts: _ttsService, stt: _sttService);
 
     _loadCharacterSettings().then((_) async {
       await _initializeSTT();
@@ -113,6 +119,13 @@ class _InCallScreenState extends State<InCallScreen> {
 
       setState(() {
         childSpeech = text;
+        final currentStage = _conversation.conversationStage;
+        if (currentStage >= 2 && !_isFairyButtonEnabled) {
+          setState(() {
+            _isFairyButtonEnabled = true;
+            debugPrint("[UI] 요정 버튼 활성화 (단계: $currentStage)");
+          });
+        }
         isSpeaking = true;
       });
 
@@ -175,6 +188,7 @@ class _InCallScreenState extends State<InCallScreen> {
     _sttService.onResult = null;
     _sttService.dispose();
     _ttsService.dispose();
+    _fairyService.stopSession();
     super.dispose();
     debugPrint("[InCallScreen] 세션 종료 완료");
   }
@@ -246,17 +260,35 @@ class _InCallScreenState extends State<InCallScreen> {
       _isEndingCall = false;
     }
   }
-  void _toggleFairyMode() {
+
+  void _toggleFairyMode() async {
+    if (!_isFairyButtonEnabled) {
+      debugPrint("[FairyMode] 아직 2단계 전이므로 요정 모드 진입 불가");
+      return;
+    }
+
     setState(() {
       isFairyMode = !isFairyMode;
-
-      if (isFairyMode) {
-        dummySpeech = "걱정 마. 병아리 요정이 왔어. 자, 같이 천천히 말해볼까?";
-      } else {
-        dummySpeech = "메타몽 목이 너무 말라... 근데 뭐라고 말해야 할지 모르겠어.";
-      }
     });
+
+    if (isFairyMode) {
+      setState(() => dummySpeech = "걱정 마! 요정이 도와줄게~ 같이 말해보자! 🌟");
+      await _ttsService.speak(dummySpeech);
+      final ctx = _conversation.contextText ?? "캐릭터가 도움이 필요해요.";
+      final target = _characterSettings?.targetSpeech ?? "도와줘";
+      await _fairyService.startGuidedSession(
+        context: ctx,
+        targets: [target],
+      );
+
+    } else {
+      setState(() => dummySpeech = "메타몽 모드로 돌아왔어~ 😌");
+      await _fairyService.stopSession();
+      await _sttService.startListening();
+    }
   }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -373,16 +405,19 @@ class _InCallScreenState extends State<InCallScreen> {
                 children: [
                   FloatingActionButton(
                     heroTag: 'fairy',
-                    backgroundColor: isFairyMode
+                    backgroundColor: !_isFairyButtonEnabled
+                        ? Colors.grey
+                        : (isFairyMode
                         ? const Color(0xFFB39DDB)
-                        : const Color(0xFF91D8F7),
-                    onPressed: _toggleFairyMode,
+                        : const Color(0xFF91D8F7)),
+                    onPressed: _isFairyButtonEnabled ? _toggleFairyMode : null,
                     child: Icon(
                       isFairyMode ? Icons.undo : Icons.auto_awesome,
                       size: 32,
                       color: Colors.white,
                     ),
                   ),
+
                   const SizedBox(width: 70),
                   FloatingActionButton(
                     heroTag: 'end',
