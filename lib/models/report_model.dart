@@ -3,7 +3,6 @@ class ConversationReport {
   final String summary;
   final String imageUrl;
   final String? imageBase64;
-  final Map<String, double> speechRatio;
   final DateTime createdAt;
 
   ConversationReport({
@@ -11,7 +10,6 @@ class ConversationReport {
     required this.summary,
     required this.imageUrl,
     this.imageBase64,
-    required this.speechRatio,
     required this.createdAt,
   });
 
@@ -21,7 +19,6 @@ class ConversationReport {
       summary: json['summary'] ?? '',
       imageUrl: json['imageUrl'] ?? '',
       imageBase64: json['imageBase64'],
-      speechRatio: Map<String, double>.from(json['speechRatio'] ?? {}),
       createdAt: DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
     );
   }
@@ -32,7 +29,6 @@ class ConversationReport {
       'summary': summary,
       'imageUrl': imageUrl,
       'imageBase64': imageBase64,
-      'speechRatio': speechRatio,
       'createdAt': createdAt.toIso8601String(),
     };
   }

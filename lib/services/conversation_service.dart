@@ -123,6 +123,7 @@ class ConversationService {
     required String role, // "user" or "assistant"
     required String text,
     DateTime? timestamp,
+    Map<String, dynamic>? extra,
   }) async {
     try {
       if (text.trim().isEmpty) return;
@@ -146,6 +147,7 @@ class ConversationService {
         'timestamp': now.toIso8601String(),
         'turnCount': turnCount,
         'stage': conversationStage,
+        ...?extra,
       });
 
       debugPrint("[Firebase] 저장 완료 → $safePath/conversation/messages/$msgId");

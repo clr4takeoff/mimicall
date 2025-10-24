@@ -22,9 +22,11 @@ class InCallScreen extends StatefulWidget {
 class _InCallScreenState extends State<InCallScreen> {
   bool isSpeaking = false;
   bool isFairyMode = false;
+  bool _isEndingCall = false;
   String dummySpeech = "메타몽 목이 너무 말라... 근데 뭐라고 말해야 할지 모르겠어.";
   String childSpeech = "";
   CharacterSettings? _characterSettings;
+  DateTime? _lastAssistantEndTime;
 
   late STTService _sttService;
   late TTSService _ttsService;
@@ -64,6 +66,7 @@ class _InCallScreenState extends State<InCallScreen> {
     await _ttsService.speak(greeting);
 
     // 발화 끝나면 STT 시작
+    await Future.delayed(const Duration(seconds: 1));
     await _sttService.startListening();
   }
 
@@ -98,38 +101,48 @@ class _InCallScreenState extends State<InCallScreen> {
     await _sttService.initialize();
 
     _sttService.onResult = (text) async {
-      if (!mounted || text.isEmpty) return;
+      if (_isEndingCall || !mounted || text.isEmpty) return;
+
+      // 1️⃣ 반응 시간 계산
+      final now = DateTime.now();
+      int? responseDelayMs;
+      if (_lastAssistantEndTime != null) {
+        responseDelayMs = now.difference(_lastAssistantEndTime!).inMilliseconds;
+        debugPrint("[ResponseDelay] 아이 반응 시간: ${responseDelayMs}ms");
+      }
 
       setState(() {
         childSpeech = text;
         isSpeaking = true;
       });
 
-      // 1️⃣ 발화 카운트 업데이트
+      // 2️⃣ 발화 카운트 업데이트
       _conversation.registerUserSpeech(text);
 
-      // 2️⃣ 현재 대화 단계 문장 가져오기
+      // 3️⃣ 현재 대화 단계 문장 가져오기
       final userName = UserInfo.name ?? "unknown";
-      final stageInstruction = await _conversation.getStageInstruction(username: userName);
+      final stageInstruction =
+      await _conversation.getStageInstruction(username: userName);
 
-      // 3️⃣ GPT 호출 (단계 정보 포함)
+      // 4️⃣ GPT 호출 (단계 정보 포함)
       final reply = await gpt.sendMessageToLLM(
         text,
         stageInstruction: stageInstruction,
       );
 
-      if (reply.isEmpty) return;
+      if (_isEndingCall || reply.isEmpty) return;
 
       setState(() => dummySpeech = reply);
 
-      final now = DateTime.now();
-
-      // 4️⃣ Firebase에 대화 저장 (turnCount, stage 포함됨)
+      // 5️⃣ Firebase에 대화 저장 (responseDelay 포함)
       await _conversation.saveMessage(
         dbPath: widget.dbPath,
         role: "user",
         text: text,
         timestamp: now,
+        extra: {
+          if (responseDelayMs != null) "responseDelayMs": responseDelayMs,
+        },
       );
       await Future.delayed(const Duration(milliseconds: 200));
       await _conversation.saveMessage(
@@ -139,13 +152,18 @@ class _InCallScreenState extends State<InCallScreen> {
         timestamp: now.add(const Duration(milliseconds: 200)),
       );
 
-      // 5️⃣ TTS 실행 전 STT 중지
+      // 6️⃣ TTS 실행 전 STT 중지
       await _sttService.stopListening(tempStop: true);
 
-      // 6️⃣ TTS 실행
+      if (_isEndingCall) return;
+
+      // 7️⃣ TTS 실행
       await _ttsService.speak(reply);
 
-      // 7️⃣ TTS 완료 후 STT 재개
+      // ✅ 8️⃣ TTS가 끝난 시점 기록 (다음 반응시간 계산용)
+      _lastAssistantEndTime = DateTime.now();
+
+      // 9️⃣ TTS 완료 후 STT 재개
       await _sttService.startListening();
     };
   }
@@ -162,73 +180,72 @@ class _InCallScreenState extends State<InCallScreen> {
   }
 
   void _onEndCall() async {
-    await _sttService.stopListening();
-    await _sttService.dispose();
-    await _ttsService.dispose(); // 확실히 종료해주겠지?
+    if (_isEndingCall) return;
+    _isEndingCall = true;
 
-    const bool useDalle = false;
-    const imagePrompt = "밝은 하늘 아래에서 메타몽이 미소 짓는 장면을 그려줘"; // 더미라 나중에 바꿔야함
-    String imageBase64 = "";
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => Dialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: const [
-              CircularProgressIndicator(color: Colors.purpleAccent),
-              SizedBox(height: 20),
-              Text(
-                "메타몽이 그림을 그리고 있어요...",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    debugPrint("[InCallScreen] 통화 종료 시작 (모든 비동기 작업 즉시 중단)");
 
     try {
+      // STT/TTS 즉시 중단
+      await Future.wait([
+        _sttService.stopListening().catchError((_) {}),
+        _ttsService.stop().catchError((_) {}),
+      ]);
+      await Future.wait([
+        _sttService.dispose().catchError((_) {}),
+        _ttsService.dispose().catchError((_) {}),
+      ]);
+
+      if (!mounted) return;
+
+      // 로딩 다이얼로그 표시
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(
+          child: CircularProgressIndicator(color: Colors.purpleAccent),
+        ),
+      );
+
+      const bool useDalle = false;
+      const imagePrompt = "밝은 하늘 아래에서 메타몽이 미소 짓는 장면을 그려줘";
+      String imageBase64 = "";
+
       if (useDalle) {
-        imageBase64 = await gpt.generateAndSaveImageBase64(
-          prompt: imagePrompt,
-          dbPath: widget.dbPath,
-        );
-        debugPrint("이미지 생성 완료 (${imageBase64.length} bytes)");
-      } else {
-        imageBase64 = "";
-        debugPrint("테스트 모드: DALL·E 호출 생략");
+        try {
+          imageBase64 = await gpt.generateAndSaveImageBase64(
+            prompt: imagePrompt,
+            dbPath: widget.dbPath,
+          );
+          debugPrint("[InCallScreen] 이미지 생성 완료 (${imageBase64.length} bytes)");
+        } catch (e) {
+          debugPrint("[InCallScreen] 이미지 생성 실패: $e");
+        }
       }
-    } catch (e) {
-      debugPrint("이미지 생성 실패: $e");
+
+      // 리포트 생성
+      final reportService = ReportService();
+      final userName = UserInfo.name ?? "unknown";
+      final reportId =
+          DateTime.now().toIso8601String().replaceAll('T', '_').split('.').first;
+
+      final report = await reportService.generateReport(userName, reportId, widget.dbPath);
+
+      if (!mounted) return;
+      Navigator.pop(context);
+
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => ReportScreen(report: report)),
+      );
+    } catch (e, st) {
+      debugPrint("[InCallScreen] 통화 종료 중 예외: $e\n$st");
     } finally {
-      if (context.mounted) Navigator.pop(context);
+      debugPrint("[InCallScreen] 통화 종료 완료");
+      _isEndingCall = false;
     }
-
-    if (!mounted) return;
-
-    final reportService = ReportService();
-    final userName = UserInfo.name ?? "unknown";
-    final reportId = DateTime.now().toIso8601String().replaceAll('T', '_').split('.').first;
-
-    // ReportService가 ConversationReport 반환
-    final report = await reportService.generateReport(userName, reportId, widget.dbPath);
-
-    if (context.mounted) Navigator.pop(context);
-
-    // ReportScreen으로 전달
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => ReportScreen(report: report)),
-    );
   }
-
   void _toggleFairyMode() {
     setState(() {
       isFairyMode = !isFairyMode;

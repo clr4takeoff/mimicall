@@ -9,7 +9,6 @@ class ReportService {
 
   Future<ConversationReport> generateReport(
       String userName, String reportId, String conversationPath) async {
-    // 리포트는 대화와 같은 경로에 저장
     final reportRef = db.child(conversationPath);
     final convRef = db.child('$conversationPath/conversation/messages');
 
@@ -20,21 +19,30 @@ class ReportService {
       await reportRef.update({
         'summary': '대화 데이터가 없습니다.',
         'comment': '',
+        'averageResponseDelayMs': 0,
       });
       return ConversationReport(
         id: reportId,
         summary: "대화가 없어요.",
         imageUrl: "",
         imageBase64: "",
-        speechRatio: {}, // 모델 정의상 남겨둠 (DB엔 안저장됨)
         createdAt: DateTime.now(),
       );
     }
 
-    // 2️⃣ 메시지 정리
+    // 2️⃣ 메시지 정리 + responseDelay 수집
     final messages = <Map<String, dynamic>>[];
+    final responseDelays = <int>[];
+
     for (final entry in convSnap.children) {
       final value = Map<String, dynamic>.from(entry.value as Map);
+
+      final delay = value['responseDelayMs'];
+      if (delay != null) {
+        final parsed = int.tryParse(delay.toString());
+        if (parsed != null && parsed > 0) responseDelays.add(parsed);
+      }
+
       messages.add({
         "role": value['role'],
         "text": value['text'],
@@ -45,8 +53,16 @@ class ReportService {
     messages.sort((a, b) =>
         a['timestamp'].toString().compareTo(b['timestamp'].toString()));
 
-    // 3️⃣ GPT 분석 요청
-    final prompt = _buildPrompt(messages);
+    // 3️⃣ 평균 반응 시간 계산
+    final avgResponseDelay = responseDelays.isEmpty
+        ? 0
+        : (responseDelays.reduce((a, b) => a + b) ~/ responseDelays.length);
+
+    print("[Report] 평균 반응 시간: ${avgResponseDelay}ms "
+        "(${(avgResponseDelay / 1000).toStringAsFixed(2)}초)");
+
+    // 4️⃣ GPT 분석 요청
+    final prompt = _buildPrompt(messages, avgResponseDelay);
     final response = await llm.fetchPromptResponse(
       "너는 언어치료 전문가야. 아이와 캐릭터의 대화를 분석해서 리포트를 작성해줘.",
       prompt,
@@ -54,34 +70,41 @@ class ReportService {
 
     final parsed = _safeParse(response);
 
-    // 4️⃣ 결과 저장 (summary + comment만)
+    // 5️⃣ 결과 저장 (summary + comment + 평균 반응 시간)
     await reportRef.update({
       'summary': parsed['summary'],
       'comment': parsed['comment'] ?? '',
+      'averageResponseDelayMs': avgResponseDelay,
     });
 
-    // 5️⃣ 모델 반환 (speechRatio는 빈 맵)
+    // 6️⃣ 모델 반환
     return ConversationReport(
       id: reportId,
       summary: parsed['summary'],
       imageUrl: "",
       imageBase64: "",
-      speechRatio: {},
       createdAt: DateTime.now(),
     );
   }
 
-  String _buildPrompt(List<Map<String, dynamic>> messages) {
+  String _buildPrompt(List<Map<String, dynamic>> messages, int avgDelayMs) {
     final dialogue = messages
         .map((m) => "${m['role'] == 'assistant' ? 'AI' : '아이'}: ${m['text']}")
         .join('\n');
+
+    final avgDelaySec = (avgDelayMs / 1000).toStringAsFixed(2);
+
     return '''
       다음은 언어치료 세션 중 아이와 AI 캐릭터의 대화입니다.
-      이를 분석하여 JSON 형태의 리포트를 만들어주세요.
+      아이의 평균 반응 시간은 약 ${avgDelaySec}초입니다.
+      이 정보를 참고하여 리포트를 작성하세요.
+
+      JSON 형태로 응답해주세요:
       {
         "summary": "오늘 대화의 요약",
         "comment": "아동의 발화 특징이나 대화 평가"
       }
+
       대화:
       $dialogue
     ''';
@@ -89,7 +112,6 @@ class ReportService {
 
   Map<String, dynamic> _safeParse(String content) {
     try {
-      // GPT 응답에 흔히 붙는 ```json ``` 코드블록 제거
       final cleaned = content
           .replaceAll(RegExp(r'```json', caseSensitive: false), '')
           .replaceAll('```', '')
@@ -104,5 +126,4 @@ class ReportService {
       };
     }
   }
-
 }
