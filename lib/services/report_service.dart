@@ -89,12 +89,20 @@ class ReportService {
 
   Map<String, dynamic> _safeParse(String content) {
     try {
-      return jsonDecode(content);
-    } catch (_) {
+      // GPT 응답에 흔히 붙는 ```json ``` 코드블록 제거
+      final cleaned = content
+          .replaceAll(RegExp(r'```json', caseSensitive: false), '')
+          .replaceAll('```', '')
+          .trim();
+
+      return jsonDecode(cleaned);
+    } catch (e) {
+      print("[Report] JSON 파싱 실패: $e\n원본: $content");
       return {
         'summary': content,
         'comment': '응답 파싱 실패',
       };
     }
   }
+
 }
