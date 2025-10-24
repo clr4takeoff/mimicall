@@ -9,9 +9,9 @@ import '../utils/user_info.dart';
 import '../services/character_settings_service.dart';
 import '../models/character_settings_model.dart';
 
-
 class InCallScreen extends StatefulWidget {
   final String dbPath;
+
   const InCallScreen({super.key, required this.dbPath});
 
   @override
@@ -20,97 +20,71 @@ class InCallScreen extends StatefulWidget {
 
 class _InCallScreenState extends State<InCallScreen> {
   bool isSpeaking = false;
-  bool isFairyMode = false; // 요정 모드 상태
-  String dummySpeech = "메타몽 목이 너무 말라... 근데 뭐라고 말해야 할지 모르겠어 😥";
+  bool isFairyMode = false;
+  String dummySpeech = "메타몽 목이 너무 말라... 근데 뭐라고 말해야 할지 모르겠어.";
   String childSpeech = "";
   CharacterSettings? _characterSettings;
 
   late STTService _sttService;
   late TTSService _ttsService;
+  final GPTResponse gpt = GPTResponse();
+
+  late ConversationService _conversation;
 
   @override
   void initState() {
     super.initState();
-    _loadCharacterSettings();
     _sttService = STTService(callId: "test_call_001");
     _ttsService = TTSService();
+    _conversation = ConversationService(stt: _sttService, tts: _ttsService);
 
-    _sttService.onResult = (text) async {
-      setState(() {
-        childSpeech = text;
-        isSpeaking = text.isNotEmpty;
-      });
-
-      if (text.isNotEmpty) {
-        final conv = ConversationService();
-        final gpt = GPTResponse();
-
-        // 1️⃣ 아이 발화 저장
-        await conv.saveMessage(
-          dbPath: widget.dbPath,
-          role: "user",
-          text: text,
-        );
-
-        // 2️⃣ 캐릭터 설정을 LLM 프롬프트에 반영
-        final reply = await gpt.sendMessageToLLM(
-          text,
-          context: _characterSettings?.contextText,
-          style: _characterSettings?.speakingStyle,
-          targetSpeechCount: _characterSettings?.targetSpeechCount,
-        );
-
-
-        // 3️⃣ AI 응답 저장
-        await conv.saveMessage(
-          dbPath: widget.dbPath,
-          role: "assistant",
-          text: reply,
-        );
-
-        // 4️⃣ 화면에 표시
-        setState(() {
-          dummySpeech = reply.isNotEmpty
-              ? reply
-              : "메타몽이 뭐라고 해야 할지 모르겠대요 😅";
-        });
-
-        // 5️⃣ 캐릭터 음성으로 읽기
-        if (reply.isNotEmpty) {
-          await _sttService.stopListening(tempStop: true);
-          await _sttService.startListening();
-        }
-      }
-    };
-
-    _initializeSTT();
+    _loadCharacterSettings().then((_) async {
+      await _initializeSTT();
+      Future.delayed(const Duration(seconds: 1), _speakInitialGreeting);
+    });
   }
 
 
-  Future<void> _initializeSTT() async {
-    await _sttService.initialize();
+
+  Future<void> _speakInitialGreeting() async {
+    final greeting = "안녕! 나는 메타몽이야. 오늘 뭐하고 있었어?";
+
+    setState(() => dummySpeech = greeting);
+
+    // 대화 저장
+    final conv = ConversationService(stt: _sttService, tts: _ttsService);
+    await conv.saveMessage(
+      dbPath: widget.dbPath,
+      role: "assistant",
+      text: greeting,
+    );
+
+    // 음성 생성 + 재생
+    await _ttsService.speak(greeting);
+
+    // 발화 끝나면 STT 시작
     await _sttService.startListening();
   }
 
-  @override
-  void dispose() {
-    _sttService.stopListening();
-    _ttsService.stop();
-    super.dispose();
-  }
+
 
   Future<void> _loadCharacterSettings() async {
     try {
-      final childName = UserInfo.name; // 로그인 후 저장된 아이 이름
+      final childName = UserInfo.name;
       if (childName == null) return;
 
       final service = CharacterSettingsService();
       final settings = await service.loadCharacterSettings(childName);
 
       if (settings != null) {
-        setState(() {
-          _characterSettings = settings;
-        });
+        setState(() => _characterSettings = settings);
+
+        gpt.initializeCharacterContext(
+          context: settings.contextText,
+          style: settings.speakingStyle,
+          targetSpeechCount: settings.targetSpeechCount,
+        );
+
         debugPrint("캐릭터 설정 불러옴: ${settings.toJson()}");
       } else {
         debugPrint("캐릭터 설정이 존재하지 않습니다.");
@@ -120,18 +94,69 @@ class _InCallScreenState extends State<InCallScreen> {
     }
   }
 
+  Future<void> _initializeSTT() async {
+    await _sttService.initialize();
 
-  /// 통화 종료 시 리포트 화면으로 이동
+    _sttService.onResult = (text) async {
+      if (!mounted || text.isEmpty) return;
+
+      setState(() {
+        childSpeech = text;
+        isSpeaking = true;
+      });
+
+      final reply = await gpt.sendMessageToLLM(text);
+      if (reply.isEmpty) return;
+
+      setState(() => dummySpeech = reply);
+
+      final now = DateTime.now();
+      await _conversation.saveMessage(
+        dbPath: widget.dbPath,
+        role: "user",
+        text: text,
+        timestamp: now,
+      );
+      await Future.delayed(const Duration(milliseconds: 200)); // 순서 보정
+      await _conversation.saveMessage(
+        dbPath: widget.dbPath,
+        role: "assistant",
+        text: reply,
+        timestamp: now.add(const Duration(milliseconds: 200)),
+      );
+
+      // TTS 실행 전 STT 명시적 중지
+      await _sttService.stopListening(tempStop: true);
+
+      // TTS 실행
+      await _ttsService.speak(reply);
+
+      // TTS 완료 후 STT 다시 시작
+      await _sttService.startListening();
+    };
+
+  }
+
+
+  @override
+  void dispose() {
+    debugPrint("[InCallScreen] 세션 종료 중...");
+    _sttService.onResult = null;
+    _sttService.dispose();
+    _ttsService.dispose();
+    super.dispose();
+    debugPrint("[InCallScreen] 세션 종료 완료");
+  }
+
   void _onEndCall() async {
     await _sttService.stopListening();
+    await _sttService.dispose();
+    await _ttsService.dispose(); // 확실히 종료해주겠지?
 
-    const bool useDalle = false; // ← 여기를 false로 두면 API 안씀
-    final gpt = GPTResponse();
+    const bool useDalle = false;
     const imagePrompt = "밝은 하늘 아래에서 메타몽이 미소 짓는 장면을 그려줘";
-
     String imageBase64 = "";
 
-    // 로딩 다이얼로그
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -158,28 +183,25 @@ class _InCallScreenState extends State<InCallScreen> {
 
     try {
       if (useDalle) {
-        // 실제 DALL·E 호출
         imageBase64 = await gpt.generateAndSaveImageBase64(
           prompt: imagePrompt,
           dbPath: widget.dbPath,
         );
         debugPrint("이미지 생성 완료 (${imageBase64.length} bytes)");
       } else {
-        // 테스트 모드: dummy사용
         imageBase64 = "";
         debugPrint("테스트 모드: DALL·E 호출 생략");
       }
     } catch (e) {
       debugPrint("이미지 생성 실패: $e");
     } finally {
-      if (context.mounted) Navigator.pop(context); // 로딩 닫기
+      if (context.mounted) Navigator.pop(context);
     }
 
-    // 리포트 화면 이동
     if (!mounted) return;
     final report = ConversationReport(
       id: DateTime.now().toIso8601String().replaceAll('T', '_').split('.').first,
-      summary: "오늘 메타몽과 즐거운 대화를 나눴어요!",
+      summary: "오늘 메타몽과 즐거운 대화를 나눴어요.",
       imageUrl: "",
       imageBase64: imageBase64,
       speechRatio: {"아이": 60, "AI": 40},
@@ -192,15 +214,14 @@ class _InCallScreenState extends State<InCallScreen> {
     );
   }
 
-  /// 요정 모드 토글
   void _toggleFairyMode() {
     setState(() {
       isFairyMode = !isFairyMode;
 
       if (isFairyMode) {
-        dummySpeech = "걱정 마! 병아리 요정이 왔어! 🌟 자, 같이 천천히 말해볼까?";
+        dummySpeech = "걱정 마. 병아리 요정이 왔어. 자, 같이 천천히 말해볼까?";
       } else {
-        dummySpeech = "메타몽 목이 너무 말라... 근데 뭐라고 말해야 할지 모르겠어 😥";
+        dummySpeech = "메타몽 목이 너무 말라... 근데 뭐라고 말해야 할지 모르겠어.";
       }
     });
   }
@@ -219,7 +240,6 @@ class _InCallScreenState extends State<InCallScreen> {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            // 상단 통화 정보
             Positioned(
               top: 80,
               child: Column(
@@ -249,13 +269,10 @@ class _InCallScreenState extends State<InCallScreen> {
                 ],
               ),
             ),
-
-            // AI 말풍선
             Positioned(
               top: MediaQuery.of(context).size.height * 0.12,
               child: Container(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                 constraints: const BoxConstraints(maxWidth: 320),
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -275,8 +292,6 @@ class _InCallScreenState extends State<InCallScreen> {
                 ),
               ),
             ),
-
-            // 캐릭터 (대화 중 애니메이션)
             Positioned(
               top: MediaQuery.of(context).size.height * 0.30,
               child: AnimatedContainer(
@@ -289,8 +304,6 @@ class _InCallScreenState extends State<InCallScreen> {
                 ),
               ),
             ),
-
-            // 아이 발화 표시 영역
             Positioned(
               bottom: 220,
               child: Container(
@@ -305,7 +318,7 @@ class _InCallScreenState extends State<InCallScreen> {
                 ),
                 child: Text(
                   childSpeech.isEmpty
-                      ? "아이가 말하면 여기에 표시됩니다..."
+                      ? "아이가 말하면 여기에 표시됩니다."
                       : childSpeech,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
@@ -316,32 +329,24 @@ class _InCallScreenState extends State<InCallScreen> {
                 ),
               ),
             ),
-
-            // 하단 버튼들
             Positioned(
               bottom: 80,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  /// 도우미 요정 버튼 (토글 가능)
                   FloatingActionButton(
                     heroTag: 'fairy',
                     backgroundColor: isFairyMode
-                        ? const Color(0xFFB39DDB) // 요정 모드 중
-                        : const Color(0xFF91D8F7), // 기본 모드
+                        ? const Color(0xFFB39DDB)
+                        : const Color(0xFF91D8F7),
                     onPressed: _toggleFairyMode,
                     child: Icon(
-                      isFairyMode
-                          ? Icons.undo // 돌아가기
-                          : Icons.auto_awesome, // ✨ 요정 소환
+                      isFairyMode ? Icons.undo : Icons.auto_awesome,
                       size: 32,
                       color: Colors.white,
                     ),
                   ),
-
                   const SizedBox(width: 70),
-
-                  /// 통화 종료 버튼
                   FloatingActionButton(
                     heroTag: 'end',
                     backgroundColor: const Color(0xFFFF6B6B),

@@ -54,38 +54,54 @@ class STTService {
   /// 무음 감지 로직
   void _startSilenceDetection(String path) {
     debugPrint("[STT] 무음 감지 시작");
-    const silenceThreshold = -40.0; // 데시벨 기준
+    const silenceThreshold = -50.0; // 더 완화된 기준 (기존 -40)
     const silenceDuration = Duration(seconds: 2);
+    const checkInterval = Duration(milliseconds: 400);
 
     Duration silentFor = Duration.zero;
     _silenceTimer?.cancel();
 
-    _silenceTimer = Timer.periodic(const Duration(milliseconds: 400), (_) async {
+    _silenceTimer = Timer.periodic(checkInterval, (_) async {
       if (_isStopped || _isProcessing) return;
 
       final amp = await _recorder.getAmplitude();
       final currentDb = amp.current ?? -120;
 
+      // debugPrint("[STT] 현재 dB: $currentDb");
+
       if (currentDb < silenceThreshold) {
-        silentFor += const Duration(milliseconds: 400);
-        if (silentFor >= silenceDuration) {
-          debugPrint("[STT] 무음 감지됨 → 녹음 중지 및 Whisper 요청");
-          _silenceTimer?.cancel();
-
-          await stopListening(tempStop: true);
-          await _sendToWhisper(path);
-
-          if (!_isStopped) {
-            debugPrint("[STT] 다음 입력 대기 중...");
-            await Future.delayed(const Duration(seconds: 1));
-            await startListening();
-          }
-        }
+        silentFor += checkInterval;
       } else {
         silentFor = Duration.zero;
       }
+
+      // 연속 무음 지속 시간 초과 시
+      if (silentFor >= silenceDuration) {
+        _silenceTimer?.cancel();
+        debugPrint("[STT] 무음 감지됨 → 녹음 중지 및 Whisper 요청");
+
+        await stopListening(tempStop: true);
+
+        // 파일 길이 검증 후 전송
+        final file = File(path);
+        if (await file.exists()) {
+          final length = await file.length();
+          if (length > 20000) { // 약 0.3초 이상
+            await _sendToWhisper(path);
+          } else {
+            debugPrint("[STT] 파일이 너무 짧아 무시됨 (${length} bytes)");
+          }
+        }
+
+        if (!_isStopped) {
+          debugPrint("[STT] 다음 입력 대기 중...");
+          await Future.delayed(const Duration(milliseconds: 800));
+          await startListening();
+        }
+      }
     });
   }
+
 
   /// Whisper API 호출
   Future<void> _sendToWhisper(String path) async {
@@ -155,4 +171,25 @@ class STTService {
       debugPrint("[STT] 완전 종료됨");
     }
   }
+
+  Future<void> dispose() async {
+    debugPrint("[STT] 완전 종료 시도");
+    _silenceTimer?.cancel();
+    _silenceTimer = null;
+    _isStopped = true;
+    _isRecording = false;
+    _isProcessing = false;
+
+    try {
+      if (await _recorder.isRecording()) {
+        await _recorder.stop();
+      }
+      await _recorder.dispose();
+    } catch (e) {
+      debugPrint("[STT dispose 오류] $e");
+    }
+
+    debugPrint("[STT] 세션 완전 종료됨");
+  }
+
 }

@@ -1,74 +1,93 @@
-import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:just_audio/just_audio.dart';
 
 class TTSService {
-  final _player = AudioPlayer();
+  bool _isProcessing = false;
+  Function()? onStart;
+  Function()? onComplete;
+  final AudioPlayer _player = AudioPlayer();
 
   Future<void> speak(String text) async {
-    if (text.trim().isEmpty) return;
+    if (_isProcessing || text.trim().isEmpty) return;
+    _isProcessing = true;
 
     try {
       final apiKey = dotenv.env['OPENAI_API_KEY'];
       if (apiKey == null || apiKey.isEmpty) {
-        debugPrint('[TTS] API 키 없음');
+        debugPrint("[TTS] OpenAI API 키가 없습니다.");
+        _isProcessing = false;
         return;
       }
 
-      debugPrint('[TTS] 요청 시작...');
-      final url = Uri.parse('https://api.openai.com/v1/audio/speech');
+      final uri = Uri.parse("https://api.openai.com/v1/audio/speech");
+      final headers = {
+        'Authorization': 'Bearer $apiKey',
+        'Content-Type': 'application/json',
+      };
+      final body = '''
+      {
+        "model": "gpt-4o-mini-tts",
+        "voice": "alloy",
+        "input": "${text.replaceAll('"', '\\"')}"
+      }
+      ''';
 
-      final body = jsonEncode({
-        'model': 'gpt-4o-mini-tts',
-        'voice': 'shimmer', // 밝고 어린 톤
-        'input': text,
-        'format': 'mp3',
-        'speed': 1.4,
-      });
-
-      final response = await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $apiKey',
-        },
-        body: body,
-      );
+      debugPrint("[TTS] OpenAI 요청 중...");
+      final response = await http.post(uri, headers: headers, body: body);
 
       if (response.statusCode == 200) {
-        final dir = await getTemporaryDirectory();
-        final file = File('${dir.path}/tts_${DateTime.now().millisecondsSinceEpoch}.mp3');
-        await file.writeAsBytes(response.bodyBytes);
+        final bytes = response.bodyBytes;
+        final filePath =
+            '${Directory.systemTemp.path}/tts_${DateTime.now().millisecondsSinceEpoch}.mp3';
+        final file = File(filePath);
+        await file.writeAsBytes(bytes);
 
-        debugPrint('[TTS] 재생 시작: ${file.path}');
+        debugPrint("[TTS] 음성 파일 생성 완료: $filePath");
+
         await _player.setFilePath(file.path);
-        await _player.play();
 
-        // 재생 완료까지 기다리기
-        await _player.processingStateStream.firstWhere(
-              (state) => state == ProcessingState.completed,
-        );
+        onStart?.call();
+        debugPrint("[TTS] 재생 시작");
+
+        // 재생 완료 감지 (정확한 타이밍)
+        StreamSubscription<PlayerState>? subscription;
+        subscription = _player.playerStateStream.listen((state) async {
+          if (state.processingState == ProcessingState.completed) {
+            debugPrint("[TTS] 재생 완료 감지됨");
+            await _player.stop();
+            await subscription?.cancel();
+            onComplete?.call();
+          }
+        });
+
+        await _player.play();
       } else {
-        debugPrint('[TTS 오류] ${response.statusCode} ${response.body}');
+        debugPrint("[TTS 오류] ${response.statusCode}: ${response.body}");
       }
     } catch (e) {
-      debugPrint('[TTS 예외] $e');
+      debugPrint("[TTS 예외] $e");
+    } finally {
+      _isProcessing = false;
     }
   }
 
   Future<void> stop() async {
+    await _player.stop();
+    _isProcessing = false;
+  }
+
+  Future<void> dispose() async {
     try {
       await _player.stop();
+      await _player.dispose();
+      debugPrint("[TTS] 세션 완전 종료됨");
     } catch (e) {
-      debugPrint('[TTS stop 오류] $e');
+      debugPrint("[TTS dispose 오류] $e");
     }
   }
 
-  void dispose() {
-    _player.dispose();
-  }
 }
