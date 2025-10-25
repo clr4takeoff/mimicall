@@ -1,62 +1,71 @@
-import { onRequest } from "firebase-functions/v2/https";
-import * as logger from "firebase-functions/logger";
-import fetch from "node-fetch";
-import FormData from "form-data";
-import { initializeApp } from "firebase-admin/app";
-import { getDatabase } from "firebase-admin/database";
+const { onRequest } = require("firebase-functions/v2/https");
+const { defineSecret } = require("firebase-functions/params");
+const logger = require("firebase-functions/logger");
+const admin = require("firebase-admin");
+const axios = require("axios");
+const FormData = require("form-data");
+const fs = require("fs");
+const path = require("path");
+const cors = require("cors");
 
-initializeApp();
+// ✅ 비밀키 참조 정의
+const ELEVEN_API_KEY = defineSecret("ELEVEN_API_KEY");
 
-// ElevenLabs 음성 클로닝 함수
-export const cloneVoice = onRequest(async (req, res) => {
-  try {
-    const { url, name } = req.body;
+admin.initializeApp();
+const corsHandler = cors({ origin: true });
 
-    if (!url || !name) {
-      res.status(400).send({ error: "url과 name 필드는 필수입니다." });
-      return;
+exports.cloneVoice = onRequest({ secrets: [ELEVEN_API_KEY] }, async (req, res) => {
+  corsHandler(req, res, async () => {
+    try {
+      const apiKey = ELEVEN_API_KEY.value();
+      if (!apiKey) return res.status(500).send("Missing ELEVEN_API_KEY");
+
+      const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+      const { name, url } = body || {};
+      if (!url || !name) return res.status(400).send("Missing name or url");
+
+      logger.info(`🎤 클로닝 요청: ${name}, 파일: ${url}`);
+
+      // 🔹 1️⃣ 파일 다운로드
+      const audioRes = await axios.get(url, { responseType: "arraybuffer" });
+      const buffer = Buffer.from(audioRes.data);
+
+      // 🔹 2️⃣ 임시 파일 저장
+      const tempPath = path.join("/tmp", `${name}.m4a`);
+      fs.writeFileSync(tempPath, buffer);
+
+      // 🔹 3️⃣ FormData 구성
+      const formData = new FormData();
+      formData.append("name", name);
+      formData.append("files", fs.createReadStream(tempPath));
+
+      // 🔹 4️⃣ ElevenLabs API 요청
+      const elevenRes = await axios.post(
+        "https://api.elevenlabs.io/v1/voices/add",
+        formData,
+        {
+          headers: {
+            "xi-api-key": apiKey,
+            ...formData.getHeaders(),
+          },
+          maxBodyLength: Infinity,
+        }
+      );
+
+      const data = elevenRes.data;
+      logger.info("🧩 ElevenLabs response:", JSON.stringify(data, null, 2));
+
+      const voiceId = data.voice_id;
+      await admin
+        .database()
+        .ref(`preference/${name}/character_settings`)
+        .update({ voiceId });
+
+      logger.info(`✅ Voice cloned successfully: ${voiceId}`);
+      return res.status(200).json({ success: true, voiceId });
+    } catch (e) {
+      logger.error("🔥 cloneVoice error:", e?.response?.data || e.message);
+      return res.status(500).send({ error: e?.response?.data || e.message });
     }
-
-    const apiKey = process.env.ELEVENLABS_API_KEY;
-    if (!apiKey) {
-      throw new Error("ElevenLabs API 키가 설정되지 않았습니다.");
-    }
-
-    logger.info(`Voice clone request for ${name}: ${url}`);
-
-    // Firebase Storage에 있는 음성 파일 가져오기
-    const voiceResponse = await fetch(url);
-    const buffer = await voiceResponse.arrayBuffer();
-
-    // ElevenLabs에 업로드
-    const form = new FormData();
-    form.append("name", `${name}_voice`);
-    form.append("files", Buffer.from(buffer), "voice.mp3");
-
-    const response = await fetch("https://api.elevenlabs.io/v1/voices/add", {
-      method: "POST",
-      headers: { "xi-api-key": apiKey },
-      body: form,
-    });
-
-    const data = await response.json();
-    if (!data.voice_id) {
-      logger.error("ElevenLabs API 오류", data);
-      throw new Error(JSON.stringify(data));
-    }
-
-    // voice_id를 Firebase Realtime DB에 저장
-    const db = getDatabase();
-    await db
-      .ref(`preference/${name}/character_settings`)
-      .update({ voiceId: data.voice_id });
-
-    res.status(200).send({
-      success: true,
-      voiceId: data.voice_id,
-    });
-  } catch (err) {
-    logger.error("cloneVoice 함수 오류", err);
-    res.status(500).send({ error: err.toString() });
-  }
+  });
 });

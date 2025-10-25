@@ -13,10 +13,13 @@
   },
   "main": "index.js",
   "dependencies": {
+    "axios": "^1.12.2",
+    "dotenv": "^16.4.5",
     "firebase-admin": "^12.6.0",
     "firebase-functions": "^6.0.1",
-    "node-fetch": "^3.3.2",
-    "form-data": "^4.0.0"
+    "form-data": "^4.0.0",
+    "formdata-node": "^6.0.3",
+    "node-fetch": "^3.3.2"
   },
   "devDependencies": {
     "firebase-functions-test": "^3.1.0"
