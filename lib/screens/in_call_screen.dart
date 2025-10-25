@@ -199,7 +199,7 @@ Future<void> _initializeSTT() async {
     debugPrint("[InCallScreen] 통화 종료 시작 (모든 비동기 작업 즉시 중단)");
 
     try {
-      // ✅ STT, TTS 중단
+      // STT, TTS 중단
       await Future.wait([
         _sttService.stopListening().catchError((_) {}),
         _ttsService.stop().catchError((_) {}),
@@ -393,7 +393,7 @@ Future<void> _initializeSTT() async {
                 height: 240,
                 child: Image.asset(
                   isSpeaking
-                      ? 'assets/character_talking.gif'
+                      ? 'assets/characters/character_talking.gif'
                       : 'assets/characters/ditto.png',
                 ),
               ),
