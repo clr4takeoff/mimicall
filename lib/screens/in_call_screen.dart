@@ -6,9 +6,10 @@ import '../services/llm_service.dart';
 import '../services/report_service.dart';
 import '../services/conversation_service.dart';
 import '../utils/user_info.dart';
-import '../services/character_settings_service.dart';
 import '../models/character_settings_model.dart';
 import '../services/fairy_service.dart';
+import 'package:firebase_database/firebase_database.dart';
+
 
 class InCallScreen extends StatefulWidget {
   final String dbPath;
@@ -25,11 +26,12 @@ class _InCallScreenState extends State<InCallScreen> {
   bool _isEndingCall = false;
   bool _isFairyButtonEnabled = false;
 
-  String dummySpeech = "메타몽 목이 너무 말라... 근데 뭐라고 말해야 할지 모르겠어.";
+  String dummySpeech = "";
   String childSpeech = "";
   CharacterSettings? _characterSettings;
   DateTime? _lastAssistantEndTime;
   DateTime? _speechStartTime;
+  String _characterName = "캐릭터";
 
   late STTService _sttService;
   late TTSService _ttsService;
@@ -53,7 +55,7 @@ class _InCallScreenState extends State<InCallScreen> {
   }
 
   Future<void> _speakInitialGreeting() async {
-    final greeting = "안녕! 나는 메타몽이야. 오늘 뭐하고 있었어?";
+    final greeting = "안녕! 나는 $_characterName 이야. 오늘 뭐하고 있었어?";
 
     setState(() => dummySpeech = greeting);
 
@@ -77,21 +79,26 @@ class _InCallScreenState extends State<InCallScreen> {
       final childName = UserInfo.name;
       if (childName == null) return;
 
-      final service = CharacterSettingsService();
-      final settings = await service.loadCharacterSettings(childName);
+      final ref =
+      FirebaseDatabase.instance.ref('preference/$childName/character_settings');
+      final snapshot = await ref.get();
 
-      if (settings != null) {
-        setState(() => _characterSettings = settings);
+      if (snapshot.exists) {
+        final data = Map<String, dynamic>.from(snapshot.value as Map);
+        final settings = CharacterSettings.fromJson(data);
+
+        setState(() {
+          _characterSettings = settings;
+          _characterName = settings.characterName.isNotEmpty
+              ? settings.characterName
+              : "캐릭터";
+        });
 
         gpt.initializeCharacterContext(
           context: settings.contextText,
           style: settings.speakingStyle,
           targetSpeechCount: settings.targetSpeechCount,
         );
-
-        debugPrint("캐릭터 설정 불러옴: ${settings.toJson()}");
-      } else {
-        debugPrint("캐릭터 설정이 존재하지 않습니다.");
       }
     } catch (e) {
       debugPrint("캐릭터 설정 불러오기 실패: $e");
@@ -223,7 +230,7 @@ Future<void> _initializeSTT() async {
 
       // 이미지 생성 (옵션)
       const bool useDalle = false;
-      const imagePrompt = "밝은 하늘 아래에서 메타몽이 미소 짓는 장면을 그려줘";
+      final imagePrompt = "밝은 하늘 아래에서 $_characterName 이 미소 짓는 장면을 그려줘";
       String imageBase64 = "";
 
       if (useDalle) {
@@ -244,7 +251,7 @@ Future<void> _initializeSTT() async {
           DateTime.now().toIso8601String().replaceAll('T', '_').split('.').first;
 
       // 1️⃣ 리포트 생성 및 DB 저장
-      await reportService.generateReport(userName, reportId, widget.dbPath);
+      await reportService.generateReport(userName, reportId, widget.dbPath,_characterSettings?.characterName ?? '캐릭터');
 
       // 2️⃣ DB 업데이트 완료 후 최신 리포트 다시 가져오기
       final updatedReport = await reportService.getLatestReport(userName);
@@ -336,10 +343,10 @@ Future<void> _initializeSTT() async {
             Positioned(
               top: 80,
               child: Column(
-                children: const [
+                children: [
                   Text(
-                    "하츄핑",
-                    style: TextStyle(
+                    _characterName,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 30,
                       fontWeight: FontWeight.bold,
@@ -348,8 +355,8 @@ Future<void> _initializeSTT() async {
                       ],
                     ),
                   ),
-                  SizedBox(height: 8),
-                  Text(
+                  const SizedBox(height: 8),
+                  const Text(
                     "통화 중...",
                     style: TextStyle(
                       color: Colors.white70,
@@ -362,6 +369,7 @@ Future<void> _initializeSTT() async {
                 ],
               ),
             ),
+
             Positioned(
               top: MediaQuery.of(context).size.height * 0.12,
               child: Container(

@@ -52,14 +52,15 @@ class ReportScreen extends StatelessWidget {
                             ),
                             onPressed: () => Navigator.pop(context),
                           ),
-                          const Text(
-                            '통화 리포트',
-                            style: TextStyle(
-                              fontSize: 22,
+                          Text(
+                            '${report.characterName.isNotEmpty ? report.characterName : "캐릭터"} 통화 기록', // UX개선을 위해 '와/과의' 문구 구분 로직 이후 추가 예정
+                            style: const TextStyle(
+                              fontSize: 20,
                               fontWeight: FontWeight.bold,
                               color: Color(0xFF5D4037),
                             ),
                           ),
+
                           IconButton(
                             icon: const Icon(
                               Icons.close_rounded,
@@ -83,16 +84,9 @@ class ReportScreen extends StatelessWidget {
                       const Text(
                         "🎉 축하해요! 임무 완료!",
                         style: TextStyle(
-                          fontSize: 24,
+                          fontSize: 18,
                           fontWeight: FontWeight.bold,
                           color: Color(0xFF5D4037),
-                          shadows: [
-                            Shadow(
-                              color: Colors.black26,
-                              offset: Offset(1, 1),
-                              blurRadius: 2,
-                            )
-                          ],
                         ),
                         textAlign: TextAlign.center,
                       ),

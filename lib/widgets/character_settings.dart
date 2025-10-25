@@ -143,13 +143,13 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
           .ref('preference/${widget.childName}/character_settings')
           .update({
         'voicePath': downloadUrl,
-        'voiceAlias': originalName,
+        'characterName': originalName,
       });
 
       setState(() {
         settings = settings.copyWith(
           voicePath: downloadUrl,
-          voiceAlias: originalName,
+          characterName: originalName,
         );
       });
 
@@ -274,7 +274,7 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Text(
-                      '현재 음성: ${settings.voiceAlias.isNotEmpty ? settings.voiceAlias : "사용자 음성"}',
+                      '현재 음성 캐릭터 이름: ${settings.characterName.isNotEmpty ? settings.characterName : "사용자 음성"}',
                       style: const TextStyle(
                         color: Colors.black87,
                         fontWeight: FontWeight.w600,
@@ -301,10 +301,10 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
                     title: const Text('파일명 변경'),
                     onTap: () async {
                       Navigator.pop(context);
-                      final alias = await _showVoiceAliasDialog(context);
+                      final alias = await _showcharacterNameDialog(context);
                       if (alias != null && alias.isNotEmpty) {
                         setState(() {
-                          settings = settings.copyWith(voiceAlias: alias);
+                          settings = settings.copyWith(characterName: alias);
                         });
                         await _settingsService.saveCharacterSettings(
                           childName: widget.childName,
@@ -313,7 +313,7 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text('별칭이 "$alias"(으)로 변경되었습니다.'),
+                              content: Text('캐릭터가 "$alias"(으)로 변경되었습니다.'),
                             ),
                           );
                         }
@@ -348,7 +348,7 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
                       setState(() {
                         settings = settings.copyWith(
                           voicePath: '기본 음성',
-                          voiceAlias: '',
+                          characterName: '',
                         );
                       });
                       await _settingsService.saveCharacterSettings(
@@ -370,8 +370,8 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
     );
   }
 
-  Future<String?> _showVoiceAliasDialog(BuildContext context) async {
-    final controller = TextEditingController(text: settings.voiceAlias);
+  Future<String?> _showcharacterNameDialog(BuildContext context) async {
+    final controller = TextEditingController(text: settings.characterName);
     return showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
@@ -489,7 +489,7 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
                 subtitle: Text(
                   settings.voicePath == '기본 음성'
                       ? '기본 음성 사용 중'
-                      : '현재: ${settings.voiceAlias.isNotEmpty ? settings.voiceAlias : settings.voicePath.split('/').last}',
+                      : '현재: ${settings.characterName.isNotEmpty ? settings.characterName : settings.voicePath.split('/').last}',
                   style: const TextStyle(color: Colors.black54, fontSize: 13),
                 ),
                 onTap: () => _showVoiceBottomSheet(context),

@@ -182,6 +182,7 @@ class STTService {
           clean.contains("이덕영") ||
           clean.contains("구독") ||
           clean.contains("수고") ||
+          clean.contains("영상") ||
           clean.contains("시청")) {
         debugPrint("[STT] 오인식된 문장 감지, 무시: $clean");
         _isProcessing = false;

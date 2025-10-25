@@ -12,6 +12,7 @@ class ReportService {
       String userName,
       String reportId,
       String conversationPath,
+      String characterName,
       ) async {
     final reportRef = db.child(conversationPath);
     final convRef = db.child('$conversationPath/conversation/messages');
@@ -106,6 +107,7 @@ class ReportService {
       'averageSpeechDurationMs': avgSpeechDuration,
       'speechCount': speechCount,
       'updatedAt': DateTime.now().toIso8601String(),
+      'characterName': characterName,
     });
 
     debugPrint("[Report] 리포트 저장 완료 → $conversationPath");

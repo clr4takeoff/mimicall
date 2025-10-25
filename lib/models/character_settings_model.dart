@@ -1,7 +1,7 @@
 class CharacterSettings {
   final String? imageBase64;
   final String voicePath;
-  final String voiceAlias;
+  final String characterName;
   final String contextText;
   final String targetSpeech;
   final String speakingStyle;
@@ -11,7 +11,7 @@ class CharacterSettings {
   const CharacterSettings({
     this.imageBase64,
     this.voicePath = '기본 음성',
-    this.voiceAlias = '',
+    this.characterName = '',
     this.contextText = '',
     this.targetSpeech = '',
     this.speakingStyle = 'encouraging',
@@ -22,7 +22,7 @@ class CharacterSettings {
   CharacterSettings copyWith({
     String? imageBase64,
     String? voicePath,
-    String? voiceAlias,
+    String? characterName,
     String? contextText,
     String? targetSpeech,
     String? speakingStyle,
@@ -32,7 +32,7 @@ class CharacterSettings {
     return CharacterSettings(
       imageBase64: imageBase64 ?? this.imageBase64,
       voicePath: voicePath ?? this.voicePath,
-      voiceAlias: voiceAlias ?? this.voiceAlias,
+      characterName: characterName ?? this.characterName,
       contextText: contextText ?? this.contextText,
       targetSpeech: targetSpeech ?? this.targetSpeech,
       speakingStyle: speakingStyle ?? this.speakingStyle,
@@ -44,7 +44,7 @@ class CharacterSettings {
   Map<String, dynamic> toJson() => {
     'imageBase64': imageBase64,
     'voicePath': voicePath,
-    'voiceAlias': voiceAlias,
+    'characterName': characterName,
     'contextText': contextText,
     'targetSpeech': targetSpeech,
     'speakingStyle': speakingStyle,
@@ -56,7 +56,7 @@ class CharacterSettings {
     return CharacterSettings(
       imageBase64: json['imageBase64'],
       voicePath: json['voicePath'] ?? '기본 음성',
-      voiceAlias: json['voiceAlias'] ?? '',
+      characterName: json['characterName'] ?? '',
       contextText: json['contextText'] ?? '',
       targetSpeech: json['targetSpeech'] ?? '',
       speakingStyle: json['speakingStyle'] ?? 'encouraging',
