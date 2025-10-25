@@ -10,8 +10,6 @@ import '../services/character_settings_service.dart';
 import '../models/character_settings_model.dart';
 import '../services/fairy_service.dart';
 
-
-
 class InCallScreen extends StatefulWidget {
   final String dbPath;
 
@@ -31,6 +29,7 @@ class _InCallScreenState extends State<InCallScreen> {
   String childSpeech = "";
   CharacterSettings? _characterSettings;
   DateTime? _lastAssistantEndTime;
+  DateTime? _speechStartTime;
 
   late STTService _sttService;
   late TTSService _ttsService;
@@ -53,14 +52,11 @@ class _InCallScreenState extends State<InCallScreen> {
     });
   }
 
-
-
   Future<void> _speakInitialGreeting() async {
     final greeting = "안녕! 나는 메타몽이야. 오늘 뭐하고 있었어?";
 
     setState(() => dummySpeech = greeting);
 
-    // 대화 저장
     final conv = ConversationService(stt: _sttService, tts: _ttsService);
     await conv.saveMessage(
       dbPath: widget.dbPath,
@@ -68,14 +64,12 @@ class _InCallScreenState extends State<InCallScreen> {
       text: greeting,
     );
 
-    // 음성 생성 + 재생
     await _ttsService.speak(greeting);
 
-    // 발화 끝나면 STT 시작
     await Future.delayed(const Duration(seconds: 1));
+    _speechStartTime = DateTime.now();
     await _sttService.startListening();
   }
-
 
   Future<void> _loadCharacterSettings() async {
     try {
@@ -103,84 +97,88 @@ class _InCallScreenState extends State<InCallScreen> {
     }
   }
 
-  Future<void> _initializeSTT() async {
-    await _sttService.initialize();
+Future<void> _initializeSTT() async {
+  await _sttService.initialize();
 
-    _sttService.onResult = (text) async {
-      if (_isEndingCall || !mounted || text.isEmpty) return;
+  // 아이 발화 시작 시점 감지
+  _sttService.onSpeechDetected = () {
+    _speechStartTime = DateTime.now();
+    debugPrint("[InCallScreen] 아이 발화 시작 시점 기록됨");
+  };
 
-      // 1️⃣ 반응 시간 계산
-      final now = DateTime.now();
-      int? responseDelayMs;
-      if (_lastAssistantEndTime != null) {
-        responseDelayMs = now.difference(_lastAssistantEndTime!).inMilliseconds;
-        debugPrint("[ResponseDelay] 아이 반응 시간: ${responseDelayMs}ms");
+  // Whisper 결과 수신 시 처리
+  _sttService.onResult = (text) async {
+    if (_isEndingCall || !mounted || text.isEmpty) return;
+
+    final now = DateTime.now();
+
+    int? speechDurationMs;
+    if (_speechStartTime != null) {
+      speechDurationMs = now.difference(_speechStartTime!).inMilliseconds;
+      debugPrint("[SpeechDuration] 아이 발화 길이: ${speechDurationMs}ms");
+    }
+
+    int? responseDelayMs;
+    if (_lastAssistantEndTime != null && _speechStartTime != null) {
+      responseDelayMs =
+          _speechStartTime!.difference(_lastAssistantEndTime!).inMilliseconds;
+      debugPrint("[ResponseDelay] 아이 반응 시간: ${responseDelayMs}ms");
+    }
+
+    setState(() {
+      childSpeech = text;
+      final currentStage = _conversation.conversationStage;
+      if (currentStage >= 2 && !_isFairyButtonEnabled) {
+        _isFairyButtonEnabled = true;
       }
+      isSpeaking = true;
+    });
 
-      setState(() {
-        childSpeech = text;
-        final currentStage = _conversation.conversationStage;
-        if (currentStage >= 2 && !_isFairyButtonEnabled) {
-          setState(() {
-            _isFairyButtonEnabled = true;
-            debugPrint("[UI] 요정 버튼 활성화 (단계: $currentStage)");
-          });
-        }
-        isSpeaking = true;
-      });
+    _conversation.registerUserSpeech(text);
 
-      // 2️⃣ 발화 카운트 업데이트
-      _conversation.registerUserSpeech(text);
+    final userName = UserInfo.name ?? "unknown";
+    final stageInstruction =
+    await _conversation.getStageInstruction(username: userName);
 
-      // 3️⃣ 현재 대화 단계 문장 가져오기
-      final userName = UserInfo.name ?? "unknown";
-      final stageInstruction =
-      await _conversation.getStageInstruction(username: userName);
+    final reply = await gpt.sendMessageToLLM(
+      text,
+      stageInstruction: stageInstruction,
+    );
 
-      // 4️⃣ GPT 호출 (단계 정보 포함)
-      final reply = await gpt.sendMessageToLLM(
-        text,
-        stageInstruction: stageInstruction,
-      );
+    if (_isEndingCall || reply.isEmpty) return;
 
-      if (_isEndingCall || reply.isEmpty) return;
+    setState(() => dummySpeech = reply);
 
-      setState(() => dummySpeech = reply);
+    await _conversation.saveMessage(
+      dbPath: widget.dbPath,
+      role: "user",
+      text: text,
+      timestamp: now,
+      extra: {
+        if (responseDelayMs != null) "responseDelayMs": responseDelayMs,
+        if (speechDurationMs != null) "speechDurationMs": speechDurationMs,
+      },
+    );
 
-      // 5️⃣ Firebase에 대화 저장 (responseDelay 포함)
-      await _conversation.saveMessage(
-        dbPath: widget.dbPath,
-        role: "user",
-        text: text,
-        timestamp: now,
-        extra: {
-          if (responseDelayMs != null) "responseDelayMs": responseDelayMs,
-        },
-      );
-      await Future.delayed(const Duration(milliseconds: 200));
-      await _conversation.saveMessage(
-        dbPath: widget.dbPath,
-        role: "assistant",
-        text: reply,
-        timestamp: now.add(const Duration(milliseconds: 200)),
-      );
+    await Future.delayed(const Duration(milliseconds: 200));
+    await _conversation.saveMessage(
+      dbPath: widget.dbPath,
+      role: "assistant",
+      text: reply,
+      timestamp: now.add(const Duration(milliseconds: 200)),
+    );
 
-      // 6️⃣ TTS 실행 전 STT 중지
-      await _sttService.stopListening(tempStop: true);
+    await _sttService.stopListening(tempStop: true);
+    if (_isEndingCall) return;
 
-      if (_isEndingCall) return;
+    await _ttsService.speak(reply);
 
-      // 7️⃣ TTS 실행
-      await _ttsService.speak(reply);
+    _lastAssistantEndTime = DateTime.now();
+    _speechStartTime = null;
 
-      // 8️⃣ TTS가 끝난 시점 기록 (다음 반응시간 계산용)
-      _lastAssistantEndTime = DateTime.now();
-
-      // 9️⃣ TTS 완료 후 STT 재개
-      await _sttService.startListening();
-    };
-  }
-
+    await _sttService.startListening();
+  };
+}
 
   @override
   void dispose() {
@@ -200,7 +198,6 @@ class _InCallScreenState extends State<InCallScreen> {
     debugPrint("[InCallScreen] 통화 종료 시작 (모든 비동기 작업 즉시 중단)");
 
     try {
-      // STT/TTS 즉시 중단
       await Future.wait([
         _sttService.stopListening().catchError((_) {}),
         _ttsService.stop().catchError((_) {}),
@@ -212,7 +209,6 @@ class _InCallScreenState extends State<InCallScreen> {
 
       if (!mounted) return;
 
-      // 로딩 다이얼로그 표시
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -237,13 +233,13 @@ class _InCallScreenState extends State<InCallScreen> {
         }
       }
 
-      // 리포트 생성
       final reportService = ReportService();
       final userName = UserInfo.name ?? "unknown";
       final reportId =
           DateTime.now().toIso8601String().replaceAll('T', '_').split('.').first;
 
-      final report = await reportService.generateReport(userName, reportId, widget.dbPath);
+      final report =
+      await reportService.generateReport(userName, reportId, widget.dbPath);
 
       if (!mounted) return;
       Navigator.pop(context);
@@ -273,7 +269,6 @@ class _InCallScreenState extends State<InCallScreen> {
         dummySpeech = "요정이 나타났어! 같이 말해보자.";
       });
 
-      // 부모가 설정한 상황과 목표 발화 사용
       final context = _characterSettings?.contextText ?? "무슨 일이 생겼대.";
       final targetList = (_characterSettings?.targetSpeech ?? '')
           .split(',')
@@ -281,7 +276,6 @@ class _InCallScreenState extends State<InCallScreen> {
           .where((e) => e.isNotEmpty)
           .toList();
 
-      // 요정 모드 시작
       await _fairyService.startGuidedSession(
         context: context,
         targets: targetList,
@@ -295,11 +289,10 @@ class _InCallScreenState extends State<InCallScreen> {
         dummySpeech = "잠깐 다른 친구랑 이야기하고 왔구나. 나는 여전히 이런 상황을 겪고있어.";
       });
 
+      _speechStartTime = DateTime.now();
       await _sttService.startListening();
     }
   }
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -352,7 +345,8 @@ class _InCallScreenState extends State<InCallScreen> {
             Positioned(
               top: MediaQuery.of(context).size.height * 0.12,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                 constraints: const BoxConstraints(maxWidth: 320),
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -428,7 +422,6 @@ class _InCallScreenState extends State<InCallScreen> {
                       color: Colors.white,
                     ),
                   ),
-
                   const SizedBox(width: 70),
                   FloatingActionButton(
                     heroTag: 'end',

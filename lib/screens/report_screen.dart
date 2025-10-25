@@ -5,7 +5,6 @@ import '../widgets/report_summary_box.dart';
 import '../widgets/report_actions.dart';
 import '../widgets/report_image.dart';
 import '../widgets/report_response_time.dart';
-
 class ReportScreen extends StatelessWidget {
   final ConversationReport report;
 

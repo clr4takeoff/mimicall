@@ -157,18 +157,25 @@ class ConversationService {
           .replaceAll('T', '_');
 
       final now = timestamp ?? DateTime.now();
-      final msgId = "msg_${now.toIso8601String().replaceAll('T', '_').split('.').first}_$role";
+
+      // 역할별로 1ms 오프셋 추가
+      final adjustedTime = role == "user"
+          ? now
+          : now.add(const Duration(milliseconds: 1)); // assistant은 +1ms
+
+      final msgId = "msg_${adjustedTime.toIso8601String().replaceAll('T', '_').split('.').first}_$role";
 
       final msgRef = _db.child('$safePath/conversation/messages/$msgId');
 
       await msgRef.set({
         'role': role,
         'text': text,
-        'timestamp': now.toIso8601String(),
+        'timestamp': adjustedTime.toIso8601String(),
         'turnCount': turnCount,
         'stage': conversationStage,
         ...?extra,
       });
+
 
       debugPrint("[Firebase] 저장 완료 → $safePath/conversation/messages/$msgId");
     } catch (e) {

@@ -23,6 +23,7 @@ class ReportService {
         'summary': '대화 데이터가 없습니다.',
         'comment': '',
         'averageResponseDelayMs': 0,
+        'averageSpeechDurationMs': 0,
       });
       return ConversationReport(
         id: reportId,
@@ -34,17 +35,33 @@ class ReportService {
       );
     }
 
-    // 2️⃣ 메시지 정리 + 반응시간 수집
+    // 2️⃣ 메시지 정리 + 반응시간 및 발화시간 수집
     final messages = <Map<String, dynamic>>[];
     final responseDelays = <int>[];
+    final speechDurations = <int>[]; // 🆕 발화 길이(ms)
+    int speechCount = 0; // 🆕 발화 횟수
 
     for (final entry in convSnap.children) {
       final value = Map<String, dynamic>.from(entry.value as Map);
 
+      // 반응 지연 시간
       final delay = value['responseDelayMs'];
       if (delay != null) {
         final parsed = int.tryParse(delay.toString());
         if (parsed != null && parsed > 0) responseDelays.add(parsed);
+      }
+
+      // 발화 길이
+      final duration = value['speechDurationMs'];
+      if (duration != null) {
+        final parsed = int.tryParse(duration.toString());
+        if (parsed != null && parsed > 0) speechDurations.add(parsed);
+      }
+
+      // 아이의 발화 횟수 세기
+      if (value['role'] == 'user' &&
+          (value['text']?.toString().trim().isNotEmpty ?? false)) {
+        speechCount++;
       }
 
       messages.add({
@@ -57,15 +74,21 @@ class ReportService {
     messages.sort((a, b) =>
         a['timestamp'].toString().compareTo(b['timestamp'].toString()));
 
-    // 3️⃣ 평균 반응 시간 계산
+    // 3️⃣ 평균 계산
     final avgResponseDelay = responseDelays.isEmpty
         ? 0
         : (responseDelays.reduce((a, b) => a + b) ~/ responseDelays.length);
 
+    final avgSpeechDuration = speechDurations.isEmpty
+        ? 0
+        : (speechDurations.reduce((a, b) => a + b) ~/ speechDurations.length);
+
     print("[Report] 평균 반응 시간: ${avgResponseDelay}ms");
+    print("[Report] 평균 발화 시간: ${avgSpeechDuration}ms");
+    print("[Report] 총 발화 횟수: $speechCount");
 
     // 4️⃣ GPT 분석
-    final prompt = _buildPrompt(messages, avgResponseDelay);
+    final prompt = _buildPrompt(messages, avgResponseDelay, avgSpeechDuration);
     final response = await llm.fetchPromptResponse(
       "너는 언어치료 전문가야. 아이와 캐릭터의 대화를 분석해서 리포트를 작성해줘.",
       prompt,
@@ -73,15 +96,17 @@ class ReportService {
 
     final parsed = _safeParse(response);
 
-    // 5️⃣ 기존 데이터가 있어도 덮어쓰기
+    // 5️⃣ Firebase 저장
     await reportRef.update({
       'summary': parsed['summary'] ?? '요약 없음',
       'comment': parsed['comment'] ?? '',
       'averageResponseDelayMs': avgResponseDelay,
+      'averageSpeechDurationMs': avgSpeechDuration,
+      'speechCount': speechCount,
       'updatedAt': DateTime.now().toIso8601String(),
     });
 
-    print("[Report] 리포트 저장(덮어쓰기) 완료 → $conversationPath");
+    print("[Report] 리포트 저장 완료 → $conversationPath");
 
     // 6️⃣ 모델 반환
     return ConversationReport(
@@ -94,15 +119,21 @@ class ReportService {
     );
   }
 
-  String _buildPrompt(List<Map<String, dynamic>> messages, int avgDelayMs) {
+  String _buildPrompt(
+      List<Map<String, dynamic>> messages,
+      int avgDelayMs,
+      int avgSpeechMs,
+      ) {
     final dialogue = messages
         .map((m) => "${m['role'] == 'assistant' ? 'AI' : '아이'}: ${m['text']}")
         .join('\n');
     final avgDelaySec = (avgDelayMs / 1000).toStringAsFixed(2);
+    final avgSpeechSec = (avgSpeechMs / 1000).toStringAsFixed(2);
 
     return '''
       다음은 언어치료 세션 중 아이와 AI 캐릭터의 대화입니다.
-      아이의 평균 반응 시간은 약 ${avgDelaySec}초입니다.
+      아이의 평균 반응 시간은 약 ${avgDelaySec}초,
+      평균 발화 시간은 약 ${avgSpeechSec}초입니다.
       이를 참고하여 리포트를 작성해주세요.
 
       JSON 형태로 응답해주세요:

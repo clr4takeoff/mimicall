@@ -12,14 +12,18 @@ class STTService {
   bool _isStopped = false;
   Timer? _silenceTimer;
 
-  String? _lastText; // 중복 방지용
-  bool _isProcessing = false; // Whisper 요청 중 여부
+  String? _lastText;
+  bool _isProcessing = false;
 
   Function(String text)? onResult;
 
+  // 실제 음성 감지 순간 콜백
+  Function()? onSpeechDetected;
+
+  bool _speechDetected = false; // 중복 감지 방지용
+
   STTService({required this.callId});
 
-  /// 초기화 및 권한 확인
   Future<void> initialize() async {
     final hasPermission = await _recorder.hasPermission();
     if (!hasPermission) {
@@ -29,11 +33,11 @@ class STTService {
     debugPrint("[STT] 초기화 완료");
   }
 
-  /// 음성 녹음 시작
   Future<void> startListening() async {
     if (_isRecording || _isStopped) return;
     _isStopped = false;
     _isRecording = true;
+    _speechDetected = false;
 
     final tempDir = Directory.systemTemp.path;
     final filePath = "$tempDir/temp_${DateTime.now().millisecondsSinceEpoch}.m4a";
@@ -51,10 +55,10 @@ class STTService {
     _startSilenceDetection(filePath);
   }
 
-  /// 무음 감지 로직
   void _startSilenceDetection(String path) {
     debugPrint("[STT] 무음 감지 시작");
-    const silenceThreshold = -50.0; // 무음 판단 기준
+    const silenceThreshold = -50.0;
+    const speechTriggerDb = -40.0;
     const silenceDuration = Duration(seconds: 2);
     const checkInterval = Duration(milliseconds: 400);
 
@@ -69,18 +73,22 @@ class STTService {
       final amp = await _recorder.getAmplitude();
       final currentDb = amp.current ?? -120;
 
-      // 최고/최저 dB 추적
+      // 실제 음성 감지 순간
+      if (!_speechDetected && currentDb > speechTriggerDb) {
+        _speechDetected = true;
+        debugPrint("[STT] 첫 음성 감지됨 (${currentDb.toStringAsFixed(1)} dB)");
+        if (onSpeechDetected != null) onSpeechDetected!();
+      }
+
       if (currentDb > maxDbDuringRecording) maxDbDuringRecording = currentDb;
       if (currentDb < minDbDuringRecording) minDbDuringRecording = currentDb;
 
-      // 무음 카운트
       if (currentDb < silenceThreshold) {
         silentFor += checkInterval;
       } else {
         silentFor = Duration.zero;
       }
 
-      // 무음 지속 시 발화 종료로 간주
       if (silentFor >= silenceDuration) {
         _silenceTimer?.cancel();
         debugPrint("[STT] 무음 감지됨 → 녹음 중지 및 Whisper 요청");
@@ -91,7 +99,6 @@ class STTService {
           final length = await file.length();
           final dynamicRange = maxDbDuringRecording - minDbDuringRecording;
 
-          // 발화 유효성 판단
           if (length > 8000 && dynamicRange > 6) {
             debugPrint("[STT] 유효한 발화 감지 → Whisper 전송 "
                 "(len: $length, range: ${dynamicRange.toStringAsFixed(1)} dB)");
@@ -102,7 +109,6 @@ class STTService {
           }
         }
 
-        // 초기화
         maxDbDuringRecording = -120.0;
         minDbDuringRecording = 0.0;
 
@@ -115,7 +121,6 @@ class STTService {
     });
   }
 
-  /// Whisper API 호출
   Future<void> _sendToWhisper(String path) async {
     if (_isProcessing) return;
     _isProcessing = true;
@@ -152,15 +157,16 @@ class STTService {
           .replaceAll(RegExp(r'[^가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z0-9\s.,!?]'), '')
           .trim();
 
-      // 짧은 발화도 허용하지만 노이즈 방지 필터 적용
       if (clean.isEmpty) {
         debugPrint("[STT] 비어있는 텍스트 무시");
         _isProcessing = false;
         return;
       }
 
-      // 노이즈 패턴 필터
-      if (clean.contains("뉴스") || clean.contains("이덕영") || clean.contains("구독")|| clean.contains("시청")) {
+      if (clean.contains("뉴스") ||
+          clean.contains("이덕영") ||
+          clean.contains("구독") ||
+          clean.contains("시청")) {
         debugPrint("[STT] 오인식된 문장 감지, 무시: $clean");
         _isProcessing = false;
         return;
@@ -180,7 +186,6 @@ class STTService {
     _isProcessing = false;
   }
 
-  /// 녹음 중지 (완전 중지 또는 일시정지)
   Future<void> stopListening({bool tempStop = false}) async {
     if (!_isRecording) return;
     _isRecording = false;
