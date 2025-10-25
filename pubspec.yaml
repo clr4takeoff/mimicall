@@ -42,6 +42,7 @@ dependencies:
   path_provider: ^2.1.1
   just_audio: ^0.9.38
   flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.4.1
 
 
   # The following adds the Cupertino Icons font to your application.
@@ -99,3 +100,13 @@ flutter:
 flutter_icons:
   android: true
   image_path: "assets/icons/icon.png"
+
+flutter_native_splash:
+  color: "#FBF2E1"
+  image: "assets/icons/icon.png"
+
+  android_12:
+    color: "#FBF2E1"
+    image: "assets/icons/icon.png"
+    branding: false
+    icon_background_color: null

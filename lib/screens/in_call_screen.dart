@@ -173,7 +173,7 @@ class _InCallScreenState extends State<InCallScreen> {
       // 7️⃣ TTS 실행
       await _ttsService.speak(reply);
 
-      // ✅ 8️⃣ TTS가 끝난 시점 기록 (다음 반응시간 계산용)
+      // 8️⃣ TTS가 끝난 시점 기록 (다음 반응시간 계산용)
       _lastAssistantEndTime = DateTime.now();
 
       // 9️⃣ TTS 완료 후 STT 재개
@@ -262,28 +262,39 @@ class _InCallScreenState extends State<InCallScreen> {
   }
 
   void _toggleFairyMode() async {
-    if (!_isFairyButtonEnabled) {
-      debugPrint("[FairyMode] 아직 2단계 전이므로 요정 모드 진입 불가");
-      return;
-    }
+    if (!isFairyMode) {
+      await _sttService.stopListening(tempStop: true);
+      await _ttsService.stop();
 
-    setState(() {
-      isFairyMode = !isFairyMode;
-    });
+      _conversation.enableFairyMode();
 
-    if (isFairyMode) {
-      setState(() => dummySpeech = "걱정 마! 요정이 도와줄게~ 같이 말해보자! 🌟");
-      await _ttsService.speak(dummySpeech);
-      final ctx = _conversation.contextText ?? "캐릭터가 도움이 필요해요.";
-      final target = _characterSettings?.targetSpeech ?? "도와줘";
+      setState(() {
+        isFairyMode = true;
+        dummySpeech = "요정이 나타났어! 같이 말해보자.";
+      });
+
+      // 부모가 설정한 상황과 목표 발화 사용
+      final context = _characterSettings?.contextText ?? "무슨 일이 생겼대.";
+      final targetList = (_characterSettings?.targetSpeech ?? '')
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+
+      // 요정 모드 시작
       await _fairyService.startGuidedSession(
-        context: ctx,
-        targets: [target],
+        context: context,
+        targets: targetList,
       );
-
     } else {
-      setState(() => dummySpeech = "메타몽 모드로 돌아왔어~ 😌");
       await _fairyService.stopSession();
+      _conversation.disableFairyMode();
+
+      setState(() {
+        isFairyMode = false;
+        dummySpeech = "잠깐 다른 친구랑 이야기하고 왔구나. 나는 여전히 이런 상황을 겪고있어.";
+      });
+
       await _sttService.startListening();
     }
   }
