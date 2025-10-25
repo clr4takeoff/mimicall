@@ -64,7 +64,8 @@ class _InCallScreenState extends State<InCallScreen> {
       text: greeting,
     );
 
-    await _ttsService.speak(greeting);
+    await _ttsService.speak(greeting, UserInfo.name ?? "unknown");
+
 
     await Future.delayed(const Duration(seconds: 1));
     _speechStartTime = DateTime.now();
@@ -171,7 +172,7 @@ Future<void> _initializeSTT() async {
     await _sttService.stopListening(tempStop: true);
     if (_isEndingCall) return;
 
-    await _ttsService.speak(reply);
+    await _ttsService.speak(reply, UserInfo.name ?? "unknown");
 
     _lastAssistantEndTime = DateTime.now();
     _speechStartTime = null;

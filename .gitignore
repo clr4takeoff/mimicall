@@ -69,3 +69,24 @@ macos/xcuserdata/
 web/**/.firebase/
 web/**/firebase-messaging-sw.js
 .env
+# === Firebase 관련 파일 및 디렉토리 ===
+# Firebase CLI 설정
+.firebase/
+.firebaserc
+firebase.json
+
+# Firebase Functions 관련
+functions/node_modules/
+functions/package-lock.json
+functions/firebase-debug.log
+functions/.runtimeconfig.json
+functions/lib/
+functions/.env
+functions/.cache/
+
+# Firebase 자동 생성 파일
+lib/firebase_options.dart
+
+# Google Service 설정 파일 (절대 올리면 안 됨)
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist

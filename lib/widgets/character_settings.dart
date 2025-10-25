@@ -6,6 +6,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:http/http.dart' as http;
+
 
 class CharacterSettingsDialog extends StatefulWidget {
   final String childName;
@@ -121,29 +125,58 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
         allowedExtensions: ['mp3', 'wav', 'm4a'],
       );
 
-      if (result != null && result.files.single.path != null) {
-        final filePath = result.files.single.path!;
+      if (result == null || result.files.single.path == null) return;
+      final file = File(result.files.single.path!);
 
-        setState(() {
-          settings = settings.copyWith(voicePath: filePath);
-        });
+      // Firebase Storage 업로드
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}.mp3';
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('voices/${widget.childName}/$fileName');
+      await ref.putFile(file);
+      final downloadUrl = await ref.getDownloadURL();
 
-        await _settingsService.saveCharacterSettings(
-          childName: widget.childName,
-          settings: settings,
-        );
+      // DB 업데이트
+      await FirebaseDatabase.instance
+          .ref('preference/${widget.childName}/character_settings')
+          .update({'voicePath': downloadUrl});
 
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('음성 파일이 변경되었습니다.')),
-        );
-      }
+      setState(() {
+        settings = settings.copyWith(voicePath: downloadUrl);
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('음성 파일 업로드 완료')));
+
+      // Cloud Function 호출 → ElevenLabs 클로닝 요청
+      await _triggerVoiceClone(downloadUrl);
     } catch (e) {
-      debugPrint('음성 파일 선택 오류: $e');
+      debugPrint('음성 파일 업로드 오류: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('음성 파일 선택 중 오류가 발생했습니다.')),
+        SnackBar(content: Text('업로드 중 오류 발생: $e')),
       );
+    }
+  }
+
+  Future<void> _triggerVoiceClone(String downloadUrl) async {
+    final uri = Uri.parse(
+        'https://us-central1-mimicall-f8853.cloudfunctions.net/cloneVoice');
+    final response = await http.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'url': downloadUrl,
+        'name': widget.childName,
+      }),
+    );
+
+
+    if (response.statusCode == 200) {
+      debugPrint('ElevenLabs 클로닝 요청 완료');
+    } else {
+      debugPrint('클로닝 요청 실패: ${response.body}');
     }
   }
 
