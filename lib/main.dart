@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
 
 // Screens
 import 'screens/name_landing_screen.dart';
@@ -15,6 +13,8 @@ Future<void> main() async {
   await Firebase.initializeApp();
 
   debugPrint("OpenAI API Key loaded: ${dotenv.env['OPENAI_API_KEY']?.substring(0, 8)}...");
+  debugPrint("ElevenLabs API Key loaded: ${dotenv.env['ELEVEN_API_KEY']?.substring(0, 8)}...");
+
 
   // SharedPreferences에서 저장된 이름 확인
   final prefs = await SharedPreferences.getInstance();

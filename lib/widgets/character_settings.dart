@@ -128,11 +128,14 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
       if (result == null || result.files.single.path == null) return;
       final file = File(result.files.single.path!);
 
+      // 안전한 파일 이름 생성
+      final ext = result.files.single.extension ?? 'mp3';
+      final safeName = Uri.encodeComponent('${DateTime.now().millisecondsSinceEpoch}.$ext');
+
       // Firebase Storage 업로드
-      final fileName = '${DateTime.now().millisecondsSinceEpoch}.mp3';
       final ref = FirebaseStorage.instance
           .ref()
-          .child('voices/${widget.childName}/$fileName');
+          .child('voices/${widget.childName}/$safeName');
       await ref.putFile(file);
       final downloadUrl = await ref.getDownloadURL();
 
@@ -161,22 +164,38 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
   }
 
   Future<void> _triggerVoiceClone(String downloadUrl) async {
-    final uri = Uri.parse(
-        'https://us-central1-mimicall-f8853.cloudfunctions.net/cloneVoice');
-    final response = await http.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'url': downloadUrl,
-        'name': widget.childName,
-      }),
-    );
+    try {
+      final uri = Uri.parse('https://clonevoice-7ay24up3aa-uc.a.run.app');
 
+      final response = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'name': widget.childName,
+          'url': downloadUrl,
+        }),
+      );
 
-    if (response.statusCode == 200) {
-      debugPrint('ElevenLabs 클로닝 요청 완료');
-    } else {
-      debugPrint('클로닝 요청 실패: ${response.body}');
+      if (response.statusCode == 200) {
+        debugPrint('✅ ElevenLabs 클로닝 요청 완료: ${response.body}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('클로닝 요청 완료')),
+        );
+      } else {
+        debugPrint('❌ 클로닝 요청 실패: ${response.body}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('클로닝 실패: ${response.body}')),
+        );
+      }
+    } catch (e) {
+      debugPrint('🔥 클로닝 요청 중 오류: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('클로닝 요청 중 오류 발생: $e')),
+        );
+      }
     }
   }
 

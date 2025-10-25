@@ -1,8 +1,7 @@
-import 'dart:convert';
-
 class CharacterSettings {
   final String? imageBase64;
   final String voicePath;
+  final String? voiceId;
   final String contextText;
   final String targetSpeech;
   final String speakingStyle;
@@ -12,18 +11,18 @@ class CharacterSettings {
   const CharacterSettings({
     this.imageBase64,
     this.voicePath = '기본 음성',
-    this.contextText = '없음',
+    this.voiceId,
+    this.contextText = '',
     this.targetSpeech = '',
     this.speakingStyle = 'encouraging',
-    this.targetSpeechCount = 1,
-    this.focusTime = 10,
+    this.targetSpeechCount = 3,
+    this.focusTime = 5,
   });
 
-  static const _sentinel = Object();
-
   CharacterSettings copyWith({
-    Object? imageBase64 = _sentinel, // 👈 Object로 받아서 null도 허용하고, 미지정도 구분
+    String? imageBase64,
     String? voicePath,
+    String? voiceId,
     String? contextText,
     String? targetSpeech,
     String? speakingStyle,
@@ -31,10 +30,9 @@ class CharacterSettings {
     int? focusTime,
   }) {
     return CharacterSettings(
-      imageBase64: identical(imageBase64, _sentinel)
-          ? this.imageBase64
-          : imageBase64 as String?, // 👈 null이면 진짜 null로 들어감
+      imageBase64: imageBase64 ?? this.imageBase64,
       voicePath: voicePath ?? this.voicePath,
+      voiceId: voiceId ?? this.voiceId,
       contextText: contextText ?? this.contextText,
       targetSpeech: targetSpeech ?? this.targetSpeech,
       speakingStyle: speakingStyle ?? this.speakingStyle,
@@ -43,25 +41,29 @@ class CharacterSettings {
     );
   }
 
-  Map<String, dynamic> toJson() => {
-    'imageBase64': imageBase64,
-    'voicePath': voicePath,
-    'contextText': contextText,
-    'targetSpeech': targetSpeech,
-    'speakingStyle': speakingStyle,
-    'targetSpeechCount': targetSpeechCount,
-    'focusTime': focusTime,
-  };
+  Map<String, dynamic> toJson() {
+    return {
+      'imageBase64': imageBase64,
+      'voicePath': voicePath,
+      'voiceId': voiceId,
+      'contextText': contextText,
+      'targetSpeech': targetSpeech,
+      'speakingStyle': speakingStyle,
+      'targetSpeechCount': targetSpeechCount,
+      'focusTime': focusTime,
+    };
+  }
 
   factory CharacterSettings.fromJson(Map<String, dynamic> json) {
     return CharacterSettings(
       imageBase64: json['imageBase64'],
-      voicePath: json['voicePath'] ?? '',
+      voicePath: json['voicePath'] ?? '기본 음성',
+      voiceId: json['voiceId'],
       contextText: json['contextText'] ?? '',
       targetSpeech: json['targetSpeech'] ?? '',
       speakingStyle: json['speakingStyle'] ?? 'encouraging',
-      targetSpeechCount: json['targetSpeechCount'] ?? 5,
-      focusTime: json['focusTime'] ?? 10,
+      targetSpeechCount: json['targetSpeechCount'] ?? 3,
+      focusTime: json['focusTime'] ?? 5,
     );
   }
 }

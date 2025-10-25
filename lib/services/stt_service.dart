@@ -4,10 +4,12 @@ import 'package:flutter/foundation.dart';
 import 'package:record/record.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'tts_service.dart'; // TTSService를 불러오기 (경로에 맞게 수정)
 
 class STTService {
   final String callId;
   final Record _recorder = Record();
+  final TTSService? ttsService; // TTSService 참조 (이전 TTS 음성 제거용)
   bool _isRecording = false;
   bool _isStopped = false;
   Timer? _silenceTimer;
@@ -16,13 +18,11 @@ class STTService {
   bool _isProcessing = false;
 
   Function(String text)? onResult;
-
-  // 실제 음성 감지 순간 콜백
   Function()? onSpeechDetected;
 
-  bool _speechDetected = false; // 중복 감지 방지용
+  bool _speechDetected = false;
 
-  STTService({required this.callId});
+  STTService({required this.callId, this.ttsService});
 
   Future<void> initialize() async {
     final hasPermission = await _recorder.hasPermission();
@@ -73,7 +73,14 @@ class STTService {
       final amp = await _recorder.getAmplitude();
       final currentDb = amp.current ?? -120;
 
-      // 실제 음성 감지 순간
+      // 현재 TTS 음성 재생 중이면 STT 입력 무시
+      if (ttsService?.isPlaying == true) {
+        debugPrint("[STT] 현재 TTS 재생 중 → 입력 무시");
+        silentFor = Duration.zero;
+        return;
+      }
+
+      // 첫 음성 감지
       if (!_speechDetected && currentDb > speechTriggerDb) {
         _speechDetected = true;
         debugPrint("[STT] 첫 음성 감지됨 (${currentDb.toStringAsFixed(1)} dB)");
@@ -100,12 +107,10 @@ class STTService {
           final dynamicRange = maxDbDuringRecording - minDbDuringRecording;
 
           if (length > 8000 && dynamicRange > 6) {
-            debugPrint("[STT] 유효한 발화 감지 → Whisper 전송 "
-                "(len: $length, range: ${dynamicRange.toStringAsFixed(1)} dB)");
+            debugPrint("[STT] 유효한 발화 감지 → Whisper 전송");
             await _sendToWhisper(path);
           } else {
-            debugPrint("[STT] 무음/잡음으로 판단 → Whisper 생략 "
-                "(len: $length, range: ${dynamicRange.toStringAsFixed(1)} dB)");
+            debugPrint("[STT] 무음/잡음으로 판단 → Whisper 생략");
           }
         }
 
@@ -153,16 +158,26 @@ class STTService {
       final text =
           RegExp(r'"text":\s*"([^"]*)"').firstMatch(body)?.group(1)?.trim() ?? "";
 
-      final clean = text
+      String clean = text
           .replaceAll(RegExp(r'[^가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z0-9\s.,!?]'), '')
           .trim();
 
+      // 이전 TTS 발화 텍스트 제거
+      final ttsText = ttsService?.lastSpokenText?.trim();
+      if (ttsText != null &&
+          ttsText.isNotEmpty &&
+          clean.contains(ttsText)) {
+        debugPrint("[STT] Whisper 결과에 이전 TTS 문장 포함됨 → 제거 처리");
+        clean = clean.replaceAll(ttsText, '').trim();
+      }
+
       if (clean.isEmpty) {
-        debugPrint("[STT] 비어있는 텍스트 무시");
+        debugPrint("[STT] 비어있는 텍스트 (TTS 제거 후) → 무시");
         _isProcessing = false;
         return;
       }
 
+      // 오인식 필터
       if (clean.contains("뉴스") ||
           clean.contains("이덕영") ||
           clean.contains("구독") ||

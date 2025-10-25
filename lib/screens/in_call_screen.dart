@@ -60,7 +60,7 @@ class _InCallScreenState extends State<InCallScreen> {
     final conv = ConversationService(stt: _sttService, tts: _ttsService);
     await conv.saveMessage(
       dbPath: widget.dbPath,
-      role: "assistant",
+      role: "z_assistant",
       text: greeting,
     );
 
@@ -164,20 +164,20 @@ Future<void> _initializeSTT() async {
     await Future.delayed(const Duration(milliseconds: 200));
     await _conversation.saveMessage(
       dbPath: widget.dbPath,
-      role: "assistant",
+      role: "z_assistant",
       text: reply,
       timestamp: now.add(const Duration(milliseconds: 200)),
     );
 
     await _sttService.stopListening(tempStop: true);
+
     if (_isEndingCall) return;
-
     await _ttsService.speak(reply, UserInfo.name ?? "unknown");
-
+    await Future.delayed(const Duration(milliseconds: 800));
     _lastAssistantEndTime = DateTime.now();
     _speechStartTime = null;
-
     await _sttService.startListening();
+
   };
 }
 
@@ -212,7 +212,7 @@ Future<void> _initializeSTT() async {
 
       if (!mounted) return;
 
-      // ✅ 로딩 다이얼로그 표시
+      // 로딩 다이얼로그 표시
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -221,7 +221,7 @@ Future<void> _initializeSTT() async {
         ),
       );
 
-      // ✅ 이미지 생성 (옵션)
+      // 이미지 생성 (옵션)
       const bool useDalle = false;
       const imagePrompt = "밝은 하늘 아래에서 메타몽이 미소 짓는 장면을 그려줘";
       String imageBase64 = "";
@@ -243,16 +243,16 @@ Future<void> _initializeSTT() async {
       final reportId =
           DateTime.now().toIso8601String().replaceAll('T', '_').split('.').first;
 
-      // ✅ 1️⃣ 리포트 생성 및 DB 저장
+      // 1️⃣ 리포트 생성 및 DB 저장
       await reportService.generateReport(userName, reportId, widget.dbPath);
 
-      // ✅ 2️⃣ DB 업데이트 완료 후 최신 리포트 다시 가져오기
+      // 2️⃣ DB 업데이트 완료 후 최신 리포트 다시 가져오기
       final updatedReport = await reportService.getLatestReport(userName);
 
       if (!mounted) return;
       Navigator.pop(context); // 로딩 닫기
 
-      // ✅ 3️⃣ 최신 리포트 데이터로 이동
+      // 3️⃣ 최신 리포트 데이터로 이동
       if (updatedReport != null) {
         Navigator.pushReplacement(
           context,

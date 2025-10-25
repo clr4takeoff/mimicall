@@ -1,12 +1,11 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'dart:convert';
-
 
 class TTSService {
   bool _isProcessing = false;
@@ -14,7 +13,9 @@ class TTSService {
   Function()? onComplete;
   final AudioPlayer _player = AudioPlayer();
 
-  /// 일반 TTS (OpenAI)
+  String? lastSpokenText; // 최근 발화 저장
+  bool get isPlaying => _player.playing;
+
   Future<void> _speakWithOpenAI(String text) async {
     final apiKey = dotenv.env['OPENAI_API_KEY'];
     if (apiKey == null || apiKey.isEmpty) {
@@ -50,12 +51,14 @@ class TTSService {
     await _player.setFilePath(file.path);
     onStart?.call();
     await _player.play();
+    await _player.processingStateStream.firstWhere(
+          (s) => s == ProcessingState.completed,
+    );
     onComplete?.call();
   }
 
-  /// 클로닝된 ElevenLabs 음성으로 TTS
   Future<void> _speakWithElevenLabs(String text, String voiceId) async {
-    final apiKey = dotenv.env['ELEVENLABS_API_KEY'];
+    final apiKey = dotenv.env['ELEVEN_API_KEY'];
     if (apiKey == null || apiKey.isEmpty) {
       debugPrint("[TTS] ElevenLabs API 키가 없습니다.");
       return;
@@ -93,12 +96,23 @@ class TTSService {
     onComplete?.call();
   }
 
-  /// 자동 전환: voiceId가 있으면 ElevenLabs, 없으면 OpenAI
   Future<void> speak(String text, String userName) async {
     if (_isProcessing || text.trim().isEmpty) return;
     _isProcessing = true;
 
+    lastSpokenText = text.trim(); // 최근 발화 저장
+
     try {
+      final elevenKey = dotenv.env['ELEVEN_API_KEY'];
+
+      // ① .env에 ElevenLabs 키가 없으면 → 바로 OpenAI로 이동
+      if (elevenKey == null || elevenKey.isEmpty) {
+        debugPrint("[TTS] .env에 ELEVEN_API_KEY가 없어 OpenAI로 전환");
+        await _speakWithOpenAI(text);
+        return;
+      }
+
+      // ② ElevenLabs 키가 있으면, Firebase에서 voiceId 확인
       final ref = FirebaseDatabase.instance
           .ref("preference/$userName/character_settings/voiceId");
       final snapshot = await ref.get();
@@ -108,11 +122,13 @@ class TTSService {
         debugPrint("[TTS] 클로닝된 음성 사용 ($voiceId)");
         await _speakWithElevenLabs(text, voiceId);
       } else {
-        debugPrint("[TTS] 기본 OpenAI 음성 사용");
+        debugPrint("[TTS] voiceId 없음 → 기본 OpenAI 음성 사용");
         await _speakWithOpenAI(text);
       }
+
     } catch (e) {
       debugPrint("[TTS 예외] $e");
+      await _speakWithOpenAI(text); // 안전망 fallback
     } finally {
       _isProcessing = false;
     }
