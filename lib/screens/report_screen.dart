@@ -5,6 +5,9 @@ import '../widgets/report_summary_box.dart';
 import '../widgets/report_actions.dart';
 import '../widgets/report_image.dart';
 import '../widgets/report_response_time.dart';
+import '../widgets/report_progress_box.dart';
+
+
 class ReportScreen extends StatelessWidget {
   final ConversationReport report;
 
@@ -106,7 +109,11 @@ class ReportScreen extends StatelessWidget {
                       ReportResponseTime(report: report),
                       const SizedBox(height: 28),
 
-                      // 요약 박스
+                      // 발화 목표 달성 여부
+                      ReportProgressBox(report: report),
+                      const SizedBox(height: 28),
+
+                      // 대화내용 요약 박스
                       ReportSummaryBox(report: report),
                       const SizedBox(height: 28),
 
