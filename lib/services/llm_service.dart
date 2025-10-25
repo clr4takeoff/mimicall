@@ -11,6 +11,7 @@ class GPTResponse {
   final List<Map<String, String>> _conversationHistory = [];
 
   void initializeCharacterContext({
+    required String characterName,
     required String context,
     required String style,
     String? contextText,
@@ -18,7 +19,7 @@ class GPTResponse {
   }) {
 
     final systemPrompt = """
-      너는 3세~7세 아동의 언어 발달을 돕는 AI 친구야.
+      너는 3세~7세 아동의 언어 발달을 돕는 '$characterName'이라는 이름의 AI 캐릭터야.
       현재 캐릭터의 상황: ${contextText ?? "특별한 상황 설명 없음"}.
       대화의 맥락: $context
       목표는 아이가 자연스럽게 발화하도록 유도하는 거야.
@@ -38,7 +39,7 @@ class GPTResponse {
     final apiKey = dotenv.env['OPENAI_API_KEY'] ?? '';
     if (apiKey.isEmpty) return "";
 
-    // ✅ 단계 전환 시 systemPrompt 교체 + 로그 출력
+    // 단계 전환 시 systemPrompt 교체 + 로그 출력
     if (stageInstruction != null) {
       debugPrint("[GPT] 단계 지침 수신 → $stageInstruction");
 
