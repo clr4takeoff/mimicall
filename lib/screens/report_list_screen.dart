@@ -138,11 +138,13 @@ class _ReportListScreenState extends State<ReportListScreen> {
                           size: 36,
                         ),
                         title: Text(
-                          formattedDate,
+                          "${report.characterName.isNotEmpty ? report.characterName : '캐릭터'} · $formattedDate",
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             color: Color(0xFF5D4037),
                           ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
                         subtitle: Text(
                           report.summary,
