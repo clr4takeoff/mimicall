@@ -1,4 +1,6 @@
-# Miscellaneous
+# ==========================
+# General
+# ==========================
 *.class
 *.log
 *.pyc
@@ -12,42 +14,30 @@
 .swiftpm/
 migrate_working_dir/
 
-# IntelliJ related
+# ==========================
+# IDE / Editor
+# ==========================
 *.iml
 *.ipr
 *.iws
 .idea/
+#.vscode/    # Uncomment if you want to ignore VS Code settings
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
+# ==========================
+# Flutter / Dart
+# ==========================
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
 /build/
+**/doc/api/
+**/ios/Flutter/.last_build_id
 
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
-
-android/app/google-services.json
-ios/Runner/GoogleService-Info.plist
-firebase-debug.log
-.firebaserc.local
+# ==========================
+# Android
+# ==========================
 android/.gradle/
 android/local.properties
 android/**/captures/
@@ -58,6 +48,14 @@ android/app/*.jks
 android/app/*.keystore
 android/key.properties
 android/keystore.properties
+android/app/debug
+android/app/profile
+android/app/release
+android/app/google-services.json
+
+# ==========================
+# iOS / macOS
+# ==========================
 ios/Pods/
 macos/Pods/
 ios/.symlinks/
@@ -66,16 +64,23 @@ ios/Flutter/Generated.xcconfig
 ios/Runner.xcworkspace/
 ios/xcuserdata/
 macos/xcuserdata/
-web/**/.firebase/
-web/**/firebase-messaging-sw.js
-.env
-# === Firebase 관련 파일 및 디렉토리 ===
-# Firebase CLI 설정
+ios/Runner/GoogleService-Info.plist
+
+# ==========================
+# Firebase
+# ==========================
 .firebase/
 .firebaserc
 firebase.json
+.firebaserc.local
+firebase-debug.log
+lib/firebase_options.dart
+web/**/.firebase/
+web/**/firebase-messaging-sw.js
 
-# Firebase Functions 관련
+# ==========================
+# Firebase Functions
+# ==========================
 functions/node_modules/
 functions/package-lock.json
 functions/firebase-debug.log
@@ -84,9 +89,7 @@ functions/lib/
 functions/.env
 functions/.cache/
 
-# Firebase 자동 생성 파일
-lib/firebase_options.dart
-
-# Google Service 설정 파일 (절대 올리면 안 됨)
-android/app/google-services.json
-ios/Runner/GoogleService-Info.plist
+# ==========================
+# Environment / Secrets
+# ==========================
+.env
