@@ -1,24 +1,28 @@
+import 'dart:convert';
+
 class CharacterSettings {
-  final String imagePath;
+  final String? imageBase64;
   final String voicePath;
   final String contextText;
-  final String targetSpeech; // 추가
+  final String targetSpeech;
   final String speakingStyle;
   final int targetSpeechCount;
   final int focusTime;
 
   const CharacterSettings({
-    required this.imagePath,
-    required this.voicePath,
-    required this.contextText,
+    this.imageBase64,
+    this.voicePath = '기본 음성',
+    this.contextText = '없음',
     this.targetSpeech = '',
     this.speakingStyle = 'encouraging',
-    this.targetSpeechCount = 3,
-    this.focusTime = 5,
+    this.targetSpeechCount = 1,
+    this.focusTime = 10,
   });
 
+  static const _sentinel = Object();
+
   CharacterSettings copyWith({
-    String? imagePath,
+    Object? imageBase64 = _sentinel, // 👈 Object로 받아서 null도 허용하고, 미지정도 구분
     String? voicePath,
     String? contextText,
     String? targetSpeech,
@@ -27,7 +31,9 @@ class CharacterSettings {
     int? focusTime,
   }) {
     return CharacterSettings(
-      imagePath: imagePath ?? this.imagePath,
+      imageBase64: identical(imageBase64, _sentinel)
+          ? this.imageBase64
+          : imageBase64 as String?, // 👈 null이면 진짜 null로 들어감
       voicePath: voicePath ?? this.voicePath,
       contextText: contextText ?? this.contextText,
       targetSpeech: targetSpeech ?? this.targetSpeech,
@@ -38,7 +44,7 @@ class CharacterSettings {
   }
 
   Map<String, dynamic> toJson() => {
-    'imagePath': imagePath,
+    'imageBase64': imageBase64,
     'voicePath': voicePath,
     'contextText': contextText,
     'targetSpeech': targetSpeech,
@@ -49,13 +55,13 @@ class CharacterSettings {
 
   factory CharacterSettings.fromJson(Map<String, dynamic> json) {
     return CharacterSettings(
-      imagePath: json['imagePath'] ?? '기본 캐릭터',
-      voicePath: json['voicePath'] ?? '기본 음성',
-      contextText: json['contextText'] ?? '없음',
+      imageBase64: json['imageBase64'],
+      voicePath: json['voicePath'] ?? '',
+      contextText: json['contextText'] ?? '',
       targetSpeech: json['targetSpeech'] ?? '',
       speakingStyle: json['speakingStyle'] ?? 'encouraging',
-      targetSpeechCount: json['targetSpeechCount'] ?? 3,
-      focusTime: json['focusTime'] ?? 5,
+      targetSpeechCount: json['targetSpeechCount'] ?? 5,
+      focusTime: json['focusTime'] ?? 10,
     );
   }
 }
