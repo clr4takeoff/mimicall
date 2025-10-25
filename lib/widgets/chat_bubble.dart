@@ -7,7 +7,7 @@ class TopBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      painter: LeftTailBubblePainter(), // 👈 painter만 바꿈
+      painter: LeftTailBubblePainter(),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
         constraints: const BoxConstraints(maxWidth: 320),

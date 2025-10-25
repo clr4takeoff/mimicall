@@ -53,13 +53,21 @@ class ReportScreen extends StatelessWidget {
                             onPressed: () => Navigator.pop(context),
                           ),
                           Text(
-                            '${report.characterName.isNotEmpty ? report.characterName : "캐릭터"} 통화 기록', // UX개선을 위해 '와/과의' 문구 구분 로직 이후 추가 예정
+                            '${report.characterName.isNotEmpty ? report.characterName : "캐릭터"}'
+                                '${(() {
+                              final name = report.characterName.isNotEmpty ? report.characterName : "캐릭터";
+                              final lastChar = name.characters.last;
+                              final codeUnit = lastChar.codeUnitAt(0);
+                              final hasBatchim = (codeUnit - 0xAC00) % 28 != 0;
+                              return hasBatchim ? "과의" : "와의";
+                            })()} 통화 기록',
                             style: const TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
                               color: Color(0xFF5D4037),
                             ),
                           ),
+
 
                           IconButton(
                             icon: const Icon(
