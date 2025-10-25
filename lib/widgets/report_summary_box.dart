@@ -19,7 +19,7 @@ class ReportSummaryBox extends StatelessWidget {
         children: [
           const Text(
             "오늘의 대화 요약",
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF5D4037)),
           ),
           const SizedBox(height: 8),
           Text(report.summary, style: const TextStyle(fontSize: 15)),

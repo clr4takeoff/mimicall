@@ -16,6 +16,7 @@ class _ReportProgressBoxState extends State<ReportProgressBox> {
   int? _targetFocusTime;
   int _actualSpeechCount = 0;
   int _actualFocusTime = 0; // 분 단위
+  String? _goalContext;
 
   bool _isLoading = true;
 
@@ -38,6 +39,7 @@ class _ReportProgressBoxState extends State<ReportProgressBox> {
         final data = Map<String, dynamic>.from(settingsSnap.value as Map);
         _targetSpeechCount = data["targetSpeechCount"] ?? 0;
         _targetFocusTime = data["focusTime"] ?? 0;
+        _goalContext = data["contextText"];
       }
 
       // 2️⃣ 실제 대화 데이터 불러오기
@@ -118,6 +120,24 @@ class _ReportProgressBoxState extends State<ReportProgressBox> {
             ),
           ),
           const SizedBox(height: 16),
+          if (_goalContext != null)
+            Container(
+              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF3DC),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                "상황: $_goalContext",
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Colors.black87,
+                  height: 1.4,
+                ),
+              ),
+            ),
+
           _buildProgressRow(
             label: "발화 횟수",
             value:
