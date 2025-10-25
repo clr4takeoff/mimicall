@@ -9,6 +9,7 @@ import '../utils/user_info.dart';
 import '../models/character_settings_model.dart';
 import '../services/fairy_service.dart';
 import 'package:firebase_database/firebase_database.dart';
+import '../widgets/chat_bubble.dart';
 
 
 class InCallScreen extends StatefulWidget {
@@ -329,10 +330,9 @@ Future<void> _initializeSTT() async {
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [
-              Color(0xFFFFEFD5),
-              Color(0xFFFFDAB9),
-              Color(0xFFFAD0C4),
-              Color(0xFFD1C4E9),
+              Color(0xFFFFE0F0), // 연핑크
+              Color(0xFFFFF9C4), // 연노랑
+              Color(0xFFB3E5FC), // 연하늘색
             ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -348,11 +348,14 @@ Future<void> _initializeSTT() async {
                   Text(
                     _characterName,
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: Color(0xFF787878),
                       fontSize: 30,
                       fontWeight: FontWeight.bold,
                       shadows: [
-                        Shadow(color: Colors.black26, blurRadius: 4),
+                        Shadow(
+                          color: Colors.white70,
+                          blurRadius: 6,
+                        ),
                       ],
                     ),
                   ),
@@ -360,7 +363,7 @@ Future<void> _initializeSTT() async {
                   const Text(
                     "통화 중...",
                     style: TextStyle(
-                      color: Colors.white70,
+                      color: Color(0xFF898989),
                       fontSize: 18,
                       shadows: [
                         Shadow(color: Colors.black26, blurRadius: 3),
@@ -372,31 +375,7 @@ Future<void> _initializeSTT() async {
             ),
 
             Positioned(
-              top: MediaQuery.of(context).size.height * 0.12,
-              child: Container(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                constraints: const BoxConstraints(maxWidth: 320),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: const [
-                    BoxShadow(color: Colors.black26, blurRadius: 6),
-                  ],
-                ),
-                child: Text(
-                  dummySpeech,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    color: Colors.black87,
-                    height: 1.4,
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              top: MediaQuery.of(context).size.height * 0.30,
+              top: MediaQuery.of(context).size.height * 0.35,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
                 height: 240,
@@ -407,31 +386,54 @@ Future<void> _initializeSTT() async {
                 ),
               ),
             ),
+
             Positioned(
-              bottom: 220,
+              top: MediaQuery.of(context).size.height * 0.22,
+              child: TopBubble(text: dummySpeech),
+            ),
+            Positioned(
+              bottom: 160,
               child: Container(
-                width: MediaQuery.of(context).size.width * 0.8,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.9),
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: const [
-                    BoxShadow(color: Colors.black12, blurRadius: 4),
-                  ],
-                ),
-                child: Text(
-                  childSpeech.isEmpty
-                      ? "아이가 말하면 여기에 표시됩니다."
-                      : childSpeech,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Color(0xFF4A4A4A),
-                    fontSize: 16,
-                    height: 1.3,
+                  width: MediaQuery.of(context).size.width * 0.8,
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFEEBF),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: const Color(0xFFFFD180),
+                      width: 1.5,
+                    ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black12,
+                        blurRadius: 4,
+                        offset: Offset(2, 2),
+                      ),
+                    ],
                   ),
+                child: Builder(
+                  builder: (_) {
+                    final name = UserInfo.name ?? "아이";
+                    final lastChar = name.characters.last;
+                    final codeUnit = lastChar.codeUnitAt(0);
+                    final hasBatchim = (codeUnit - 0xAC00) % 28 != 0; // 받침 여부 판별
+                    final particle = hasBatchim ? "이" : ""; // 받침 있으면 "이", 없으면 공백
+                    final defaultText = "$name$particle가 말하는 내용은 여기 나타날 거야.";
+
+                    return Text(
+                      childSpeech.isEmpty ? defaultText : childSpeech,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Color(0xFF000000),
+                        fontSize: 16,
+                        height: 1.3,
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
+
             Positioned(
               bottom: 80,
               child: Row(
