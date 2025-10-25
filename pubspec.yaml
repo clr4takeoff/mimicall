@@ -43,6 +43,8 @@ dependencies:
   just_audio: ^0.9.38
   flutter_launcher_icons: ^0.13.1
   flutter_native_splash: ^2.4.1
+  file_picker: ^8.0.0
+  audioplayers: ^6.1.0
 
 
   # The following adds the Cupertino Icons font to your application.

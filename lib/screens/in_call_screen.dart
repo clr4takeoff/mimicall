@@ -198,10 +198,12 @@ Future<void> _initializeSTT() async {
     debugPrint("[InCallScreen] 통화 종료 시작 (모든 비동기 작업 즉시 중단)");
 
     try {
+      // ✅ STT, TTS 중단
       await Future.wait([
         _sttService.stopListening().catchError((_) {}),
         _ttsService.stop().catchError((_) {}),
       ]);
+
       await Future.wait([
         _sttService.dispose().catchError((_) {}),
         _ttsService.dispose().catchError((_) {}),
@@ -209,6 +211,7 @@ Future<void> _initializeSTT() async {
 
       if (!mounted) return;
 
+      // ✅ 로딩 다이얼로그 표시
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -217,6 +220,7 @@ Future<void> _initializeSTT() async {
         ),
       );
 
+      // ✅ 이미지 생성 (옵션)
       const bool useDalle = false;
       const imagePrompt = "밝은 하늘 아래에서 메타몽이 미소 짓는 장면을 그려줘";
       String imageBase64 = "";
@@ -238,19 +242,34 @@ Future<void> _initializeSTT() async {
       final reportId =
           DateTime.now().toIso8601String().replaceAll('T', '_').split('.').first;
 
-      final report =
+      // ✅ 1️⃣ 리포트 생성 및 DB 저장
       await reportService.generateReport(userName, reportId, widget.dbPath);
 
-      if (!mounted) return;
-      Navigator.pop(context);
+      // ✅ 2️⃣ DB 업데이트 완료 후 최신 리포트 다시 가져오기
+      final updatedReport = await reportService.getLatestReport(userName);
 
       if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => ReportScreen(report: report)),
-      );
+      Navigator.pop(context); // 로딩 닫기
+
+      // ✅ 3️⃣ 최신 리포트 데이터로 이동
+      if (updatedReport != null) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ReportScreen(report: updatedReport),
+          ),
+        );
+      } else {
+        debugPrint("[InCallScreen] 최신 리포트 불러오기 실패 — generateReport는 성공했지만 getLatestReport 결과 없음");
+      }
     } catch (e, st) {
-      debugPrint("[InCallScreen] 통화 종료 중 예외: $e\n$st");
+      debugPrint("[InCallScreen] 통화 종료 중 예외 발생: $e\n$st");
+      if (mounted) {
+        Navigator.pop(context); // 로딩 닫기
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("리포트 생성 중 오류가 발생했습니다: $e")),
+        );
+      }
     } finally {
       debugPrint("[InCallScreen] 통화 종료 완료");
       _isEndingCall = false;

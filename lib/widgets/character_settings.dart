@@ -4,6 +4,8 @@ import 'package:image_picker/image_picker.dart';
 import '../services/character_settings_service.dart';
 import 'dart:convert';
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 class CharacterSettingsDialog extends StatefulWidget {
   final String childName;
@@ -22,6 +24,8 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
   final CharacterSettingsService _settingsService = CharacterSettingsService();
 
   bool _isLoading = true;
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  bool _isPlaying = false;
 
   CharacterSettings settings = const CharacterSettings(
     imageBase64: null,
@@ -54,7 +58,7 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
     }
   }
 
-  /// 이미지 선택
+  /// 캐릭터 이미지 선택
   Future<void> _pickCharacterImage() async {
     final picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
@@ -79,16 +83,14 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
     }
   }
 
-  /// 이미지 삭제
+  /// 캐릭터 이미지 삭제
   Future<void> _deleteCharacterImage() async {
     try {
       final updated = settings.copyWith(imageBase64: null);
-
       await _settingsService.saveCharacterSettings(
         childName: widget.childName,
         settings: updated,
       );
-
       if (!mounted) return;
 
       setState(() {
@@ -102,13 +104,161 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
         ),
       );
     } catch (e) {
-      debugPrint('[CharacterSettingsDialog] 이미지 삭제 실패: $e');
+      debugPrint('이미지 삭제 실패: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('이미지 삭제 중 오류가 발생했습니다: $e')),
         );
       }
     }
+  }
+
+  /// 음성 파일 선택
+  Future<void> _pickVoiceFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['mp3', 'wav', 'm4a'],
+      );
+
+      if (result != null && result.files.single.path != null) {
+        final filePath = result.files.single.path!;
+
+        setState(() {
+          settings = settings.copyWith(voicePath: filePath);
+        });
+
+        await _settingsService.saveCharacterSettings(
+          childName: widget.childName,
+          settings: settings,
+        );
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('음성 파일이 변경되었습니다.')),
+        );
+      }
+    } catch (e) {
+      debugPrint('음성 파일 선택 오류: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('음성 파일 선택 중 오류가 발생했습니다.')),
+      );
+    }
+  }
+
+  /// 음성 미리듣기
+  Future<void> _playVoiceFile() async {
+    try {
+      if (settings.voicePath.isEmpty || settings.voicePath == '기본 음성') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('재생할 음성 파일이 없습니다.')),
+        );
+        return;
+      }
+
+      if (_isPlaying) {
+        await _audioPlayer.stop();
+        setState(() => _isPlaying = false);
+        return;
+      }
+
+      await _audioPlayer.play(DeviceFileSource(settings.voicePath));
+      setState(() => _isPlaying = true);
+
+      _audioPlayer.onPlayerComplete.listen((_) {
+        setState(() => _isPlaying = false);
+      });
+    } catch (e) {
+      debugPrint('음성 재생 오류: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('음성 재생 중 오류가 발생했습니다.')),
+      );
+    }
+  }
+
+  /// 음성 설정 BottomSheet
+  void _showVoiceBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFFFFF7E9),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.black26,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const Text(
+                  '🎵 캐릭터 음성 설정',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF5D4037),
+                    fontSize: 17,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ListTile(
+                  leading: const Icon(Icons.folder_open,
+                      color: Colors.orangeAccent),
+                  title: const Text('음성 파일 선택'),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await _pickVoiceFile();
+                  },
+                ),
+                ListTile(
+                  leading: Icon(
+                    _isPlaying
+                        ? Icons.stop_circle
+                        : Icons.play_circle_fill,
+                    color: _isPlaying ? Colors.redAccent : Colors.green,
+                  ),
+                  title: Text(_isPlaying ? '재생 중지' : '미리듣기'),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await _playVoiceFile();
+                  },
+                ),
+                if (settings.voicePath != '기본 음성' &&
+                    settings.voicePath.isNotEmpty)
+                  ListTile(
+                    leading:
+                    const Icon(Icons.delete_outline, color: Colors.red),
+                    title: const Text('현재 음성 삭제'),
+                    onTap: () async {
+                      Navigator.pop(context);
+                      setState(() {
+                        settings = settings.copyWith(voicePath: '기본 음성');
+                      });
+                      await _settingsService.saveCharacterSettings(
+                        childName: widget.childName,
+                        settings: settings,
+                      );
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('기본 음성으로 복원되었습니다.')),
+                      );
+                    },
+                  ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -143,10 +293,10 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
                   settings.imageBase64 != null
                       ? "커스텀 캐릭터가 설정되었습니다."
                       : "기본 캐릭터 사용 중",
-                  style: const TextStyle(color: Colors.black54, fontSize: 13),
+                  style:
+                  const TextStyle(color: Colors.black54, fontSize: 13),
                 ),
               ),
-
               if (settings.imageBase64 != null) ...[
                 Padding(
                   padding: const EdgeInsets.all(12),
@@ -154,64 +304,23 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
                     borderRadius: BorderRadius.circular(10),
                     child: Image.memory(
                       base64Decode(settings.imageBase64!),
-                      key: ValueKey(settings.imageBase64), // 🔑 캐시 무시하고 새로 그림
+                      key: ValueKey(settings.imageBase64),
                       height: 100,
                       width: 100,
                       fit: BoxFit.cover,
                     ),
                   ),
                 ),
-                // 버튼 영역 (크기 줄여서 가로 배치)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      SizedBox(
-                        width: 95,
-                        height: 36,
-                        child: TextButton.icon(
-                          onPressed: _pickCharacterImage,
-                          icon: const Icon(Icons.edit,
-                              color: Colors.orangeAccent, size: 18),
-                          label: const Text(
-                            '변경',
-                            style: TextStyle(
-                                color: Colors.orangeAccent, fontSize: 13),
-                          ),
-                          style: TextButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            backgroundColor:
-                            Colors.orangeAccent.withOpacity(0.1),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                        ),
-                      ),
+                      _smallButton(Icons.edit, '변경',
+                          Colors.orangeAccent, _pickCharacterImage),
                       const SizedBox(width: 10),
-                      SizedBox(
-                        width: 95,
-                        height: 36,
-                        child: TextButton.icon(
-                          onPressed: _deleteCharacterImage,
-                          icon: const Icon(Icons.delete_outline,
-                              color: Colors.redAccent, size: 18),
-                          label: const Text(
-                            '삭제',
-                            style: TextStyle(
-                                color: Colors.redAccent, fontSize: 13),
-                          ),
-                          style: TextButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            backgroundColor:
-                            Colors.redAccent.withOpacity(0.1),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                        ),
-                      ),
+                      _smallButton(Icons.delete_outline, '삭제',
+                          Colors.redAccent, _deleteCharacterImage),
                     ],
                   ),
                 ),
@@ -221,12 +330,11 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
                   icon: const Icon(Icons.add_a_photo_outlined),
                   label: const Text("이미지 추가"),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFffbf61),
+                    backgroundColor: const Color(0xFFFFB74D),
                     foregroundColor: Colors.white,
                   ),
                 ),
               ],
-
               const Divider(thickness: 0.8),
 
               // 캐릭터 음성 설정
@@ -235,12 +343,13 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
                     color: Color(0xFF4FC3F7)),
                 title: const Text('캐릭터 음성 설정'),
                 subtitle: Text(
-                  '현재: ${settings.voicePath}',
-                  style: const TextStyle(color: Colors.black54, fontSize: 13),
+                  settings.voicePath == '기본 음성'
+                      ? '기본 음성 사용 중'
+                      : '현재: ${settings.voicePath.split('/').last}',
+                  style:
+                  const TextStyle(color: Colors.black54, fontSize: 13),
                 ),
-                onTap: () {
-                  // TODO: 음성 설정 다이얼로그 추가
-                },
+                onTap: () => _showVoiceBottomSheet(context),
               ),
               const Divider(thickness: 0.8),
 
@@ -251,7 +360,8 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
                 title: const Text('대화 상황 / 목표 발화 설정'),
                 subtitle: Text(
                   '상황: ${settings.contextText}\n목표 발화: ${settings.targetSpeech.isEmpty ? "없음" : settings.targetSpeech}',
-                  style: const TextStyle(color: Colors.black54, fontSize: 13),
+                  style:
+                  const TextStyle(color: Colors.black54, fontSize: 13),
                 ),
                 onTap: () async {
                   final result = await _showContextAndTargetDialog(context);
@@ -274,7 +384,8 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
                 title: const Text('대화 스타일'),
                 subtitle: Text(
                   _styleLabel(settings.speakingStyle),
-                  style: const TextStyle(color: Colors.black54, fontSize: 13),
+                  style:
+                  const TextStyle(color: Colors.black54, fontSize: 13),
                 ),
                 onTap: () async {
                   final result = await _showSpeakingStyleDialog(context);
@@ -368,7 +479,7 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
     );
   }
 
-  // 상황 + 목표 발화 입력 다이얼로그
+  /// 상황 + 목표 발화 입력 다이얼로그
   Future<Map<String, String>?> _showContextAndTargetDialog(
       BuildContext context) async {
     final contextController = TextEditingController(text: settings.contextText);
@@ -379,7 +490,8 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
       builder: (_) {
         return AlertDialog(
           backgroundColor: const Color(0xFFFFF7E9),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Text(
             '상황과 목표 발화 설정',
             style: TextStyle(
@@ -391,38 +503,30 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
           content: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             child: Column(
-              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  '🪄 아이가 연습할 발화 상황',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF5D4037),
-                    fontSize: 14,
-                  ),
-                ),
+                const Text('🪄 아이가 연습할 발화 상황',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF5D4037),
+                        fontSize: 14)),
                 const SizedBox(height: 6),
                 TextField(
                   controller: contextController,
                   maxLines: 2,
                   decoration: InputDecoration(
-                    hintText: '예: 목말라서 물을 마시고 싶은데 물을 달라고 말하지 못하는 상황',
+                    hintText: '예: 목말라서 물을 마시고 싶은데 말하지 못하는 상황',
                     hintStyle: const TextStyle(color: Colors.black38),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
                 const SizedBox(height: 20),
-                const Text(
-                  '🎯 아이가 말하길 원하는 문장',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF5D4037),
-                    fontSize: 14,
-                  ),
-                ),
+                const Text('🎯 아이가 말하길 원하는 문장',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF5D4037),
+                        fontSize: 14)),
                 const SizedBox(height: 6),
                 TextField(
                   controller: targetController,
@@ -431,8 +535,7 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
                     hintText: '예: 물 주세요, 물 마실래요',
                     hintStyle: const TextStyle(color: Colors.black38),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
               ],
@@ -460,7 +563,7 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
     );
   }
 
-  // 대화 스타일 선택 다이얼로그
+  /// 대화 스타일 선택
   Future<String?> _showSpeakingStyleDialog(BuildContext context) async {
     return showDialog<String>(
       context: context,
@@ -484,7 +587,7 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
     );
   }
 
-  // 숫자 입력 다이얼로그
+  /// 숫자 입력 다이얼로그
   Future<int?> _showNumberInputDialog(
       BuildContext context, String title, int currentValue) async {
     final controller = TextEditingController(text: currentValue.toString());
@@ -493,12 +596,14 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
       builder: (_) {
         return AlertDialog(
           backgroundColor: const Color(0xFFFFF7E9),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Text(title),
           content: TextField(
             controller: controller,
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(border: OutlineInputBorder()),
+            decoration:
+            const InputDecoration(border: OutlineInputBorder()),
           ),
           actions: [
             TextButton(
@@ -520,6 +625,7 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
     );
   }
 
+  /// 대화 스타일 텍스트
   String _styleLabel(String code) {
     switch (code) {
       case "encouraging":
@@ -531,5 +637,24 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
       default:
         return "격려형";
     }
+  }
+
+  /// 공통 버튼 스타일
+  Widget _smallButton(
+      IconData icon, String label, Color color, VoidCallback onPressed) {
+    return SizedBox(
+      width: 95,
+      height: 36,
+      child: TextButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, color: color, size: 18),
+        label: Text(label, style: TextStyle(color: color, fontSize: 13)),
+        style: TextButton.styleFrom(
+          padding: EdgeInsets.zero,
+          backgroundColor: color.withOpacity(0.1),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      ),
+    );
   }
 }
