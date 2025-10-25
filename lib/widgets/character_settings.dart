@@ -127,32 +127,36 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
 
       if (result == null || result.files.single.path == null) return;
       final file = File(result.files.single.path!);
+      final originalName = result.files.single.name; // 원본 파일명 저장용
 
-      // 안전한 파일 이름 생성
       final ext = result.files.single.extension ?? 'mp3';
       final safeName = Uri.encodeComponent('${DateTime.now().millisecondsSinceEpoch}.$ext');
 
-      // Firebase Storage 업로드
       final ref = FirebaseStorage.instance
           .ref()
           .child('voices/${widget.childName}/$safeName');
       await ref.putFile(file);
       final downloadUrl = await ref.getDownloadURL();
 
-      // DB 업데이트
+      // DB 저장
       await FirebaseDatabase.instance
           .ref('preference/${widget.childName}/character_settings')
-          .update({'voicePath': downloadUrl});
+          .update({
+        'voicePath': downloadUrl,
+        'voiceAlias': originalName,
+      });
 
       setState(() {
-        settings = settings.copyWith(voicePath: downloadUrl);
+        settings = settings.copyWith(
+          voicePath: downloadUrl,
+          voiceAlias: originalName,
+        );
       });
 
       if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('음성 파일 업로드 완료')));
 
-      // Cloud Function 호출 → ElevenLabs 클로닝 요청
       await _triggerVoiceClone(downloadUrl);
     } catch (e) {
       debugPrint('음성 파일 업로드 오류: $e');
@@ -162,6 +166,7 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
       );
     }
   }
+
 
   Future<void> _triggerVoiceClone(String downloadUrl) async {
     try {
@@ -262,6 +267,22 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
                   ),
                 ),
                 const SizedBox(height: 8),
+
+                // 현재 별칭 표시
+                if (settings.voicePath != '기본 음성' &&
+                    settings.voicePath.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      '현재 음성: ${settings.voiceAlias.isNotEmpty ? settings.voiceAlias : "사용자 음성"}',
+                      style: const TextStyle(
+                        color: Colors.black87,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+
+                // 음성 파일 선택
                 ListTile(
                   leading: const Icon(Icons.folder_open,
                       color: Colors.orangeAccent),
@@ -271,6 +292,36 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
                     await _pickVoiceFile();
                   },
                 ),
+
+                // 별칭 변경 기능 추가
+                if (settings.voicePath != '기본 음성' &&
+                    settings.voicePath.isNotEmpty)
+                  ListTile(
+                    leading: const Icon(Icons.edit, color: Colors.blueAccent),
+                    title: const Text('파일명 변경'),
+                    onTap: () async {
+                      Navigator.pop(context);
+                      final alias = await _showVoiceAliasDialog(context);
+                      if (alias != null && alias.isNotEmpty) {
+                        setState(() {
+                          settings = settings.copyWith(voiceAlias: alias);
+                        });
+                        await _settingsService.saveCharacterSettings(
+                          childName: widget.childName,
+                          settings: settings,
+                        );
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('별칭이 "$alias"(으)로 변경되었습니다.'),
+                            ),
+                          );
+                        }
+                      }
+                    },
+                  ),
+
+                // 음성 미리듣기
                 ListTile(
                   leading: Icon(
                     _isPlaying
@@ -284,6 +335,8 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
                     await _playVoiceFile();
                   },
                 ),
+
+                // 음성 삭제
                 if (settings.voicePath != '기본 음성' &&
                     settings.voicePath.isNotEmpty)
                   ListTile(
@@ -293,7 +346,10 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
                     onTap: () async {
                       Navigator.pop(context);
                       setState(() {
-                        settings = settings.copyWith(voicePath: '기본 음성');
+                        settings = settings.copyWith(
+                          voicePath: '기본 음성',
+                          voiceAlias: '',
+                        );
                       });
                       await _settingsService.saveCharacterSettings(
                         childName: widget.childName,
@@ -304,6 +360,7 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
                       );
                     },
                   ),
+
                 const SizedBox(height: 8),
               ],
             ),
@@ -312,6 +369,41 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
       },
     );
   }
+
+  Future<String?> _showVoiceAliasDialog(BuildContext context) async {
+    final controller = TextEditingController(text: settings.voiceAlias);
+    return showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFFFFF7E9),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Text('음성 파일명 변경'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: '새 이름 입력',
+            border: OutlineInputBorder(),
+            hintText: '예: 타요, 하츄핑 등',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('취소'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFFB74D),
+            ),
+            onPressed: () =>
+                Navigator.pop(context, controller.text.trim()),
+            child: const Text('확인', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -397,9 +489,8 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
                 subtitle: Text(
                   settings.voicePath == '기본 음성'
                       ? '기본 음성 사용 중'
-                      : '현재: ${settings.voicePath.split('/').last}',
-                  style:
-                  const TextStyle(color: Colors.black54, fontSize: 13),
+                      : '현재: ${settings.voiceAlias.isNotEmpty ? settings.voiceAlias : settings.voicePath.split('/').last}',
+                  style: const TextStyle(color: Colors.black54, fontSize: 13),
                 ),
                 onTap: () => _showVoiceBottomSheet(context),
               ),

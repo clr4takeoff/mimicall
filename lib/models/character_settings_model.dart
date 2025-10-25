@@ -1,7 +1,7 @@
 class CharacterSettings {
   final String? imageBase64;
   final String voicePath;
-  final String? voiceId;
+  final String voiceAlias;
   final String contextText;
   final String targetSpeech;
   final String speakingStyle;
@@ -11,18 +11,18 @@ class CharacterSettings {
   const CharacterSettings({
     this.imageBase64,
     this.voicePath = '기본 음성',
-    this.voiceId,
+    this.voiceAlias = '',
     this.contextText = '',
     this.targetSpeech = '',
     this.speakingStyle = 'encouraging',
-    this.targetSpeechCount = 3,
-    this.focusTime = 5,
+    this.targetSpeechCount = 1,
+    this.focusTime = 10,
   });
 
   CharacterSettings copyWith({
     String? imageBase64,
     String? voicePath,
-    String? voiceId,
+    String? voiceAlias,
     String? contextText,
     String? targetSpeech,
     String? speakingStyle,
@@ -32,7 +32,7 @@ class CharacterSettings {
     return CharacterSettings(
       imageBase64: imageBase64 ?? this.imageBase64,
       voicePath: voicePath ?? this.voicePath,
-      voiceId: voiceId ?? this.voiceId,
+      voiceAlias: voiceAlias ?? this.voiceAlias,
       contextText: contextText ?? this.contextText,
       targetSpeech: targetSpeech ?? this.targetSpeech,
       speakingStyle: speakingStyle ?? this.speakingStyle,
@@ -41,29 +41,27 @@ class CharacterSettings {
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'imageBase64': imageBase64,
-      'voicePath': voicePath,
-      'voiceId': voiceId,
-      'contextText': contextText,
-      'targetSpeech': targetSpeech,
-      'speakingStyle': speakingStyle,
-      'targetSpeechCount': targetSpeechCount,
-      'focusTime': focusTime,
-    };
-  }
+  Map<String, dynamic> toJson() => {
+    'imageBase64': imageBase64,
+    'voicePath': voicePath,
+    'voiceAlias': voiceAlias,
+    'contextText': contextText,
+    'targetSpeech': targetSpeech,
+    'speakingStyle': speakingStyle,
+    'targetSpeechCount': targetSpeechCount,
+    'focusTime': focusTime,
+  };
 
   factory CharacterSettings.fromJson(Map<String, dynamic> json) {
     return CharacterSettings(
       imageBase64: json['imageBase64'],
       voicePath: json['voicePath'] ?? '기본 음성',
-      voiceId: json['voiceId'],
+      voiceAlias: json['voiceAlias'] ?? '',
       contextText: json['contextText'] ?? '',
       targetSpeech: json['targetSpeech'] ?? '',
       speakingStyle: json['speakingStyle'] ?? 'encouraging',
-      targetSpeechCount: json['targetSpeechCount'] ?? 3,
-      focusTime: json['focusTime'] ?? 5,
+      targetSpeechCount: json['targetSpeechCount'] ?? 1,
+      focusTime: json['focusTime'] ?? 10,
     );
   }
 }
