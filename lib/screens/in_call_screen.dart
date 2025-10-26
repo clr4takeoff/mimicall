@@ -49,6 +49,22 @@ class _InCallScreenState extends State<InCallScreen> {
     _conversation = ConversationService(stt: _sttService, tts: _ttsService);
     _fairyService = FairyService(tts: _ttsService, stt: _sttService);
 
+    // 요정모드 말풍선 변경 콜백
+    _fairyService.onFairySpeak = (line) {
+      if (!mounted) return;
+      setState(() {
+        dummySpeech = line;
+      });
+    };
+
+    _fairyService.onChildSpeak = (line) {
+      if (!mounted) return;
+      setState(() {
+        childSpeech = line;
+      });
+    };
+
+
     _loadCharacterSettings().then((_) async {
       await _initializeSTT();
       Future.delayed(const Duration(seconds: 1), _speakInitialGreeting);
@@ -380,9 +396,12 @@ Future<void> _initializeSTT() async {
                 duration: const Duration(milliseconds: 300),
                 height: 240,
                 child: Image.asset(
-                  isSpeaking
-                      ? 'assets/characters/character_talking.gif'
+                  isFairyMode
+                      ? 'assets/characters/fairy.png' // 요정모드일 때 이미지
+                      : isSpeaking
+                      ? 'assets/characters/character_talking.gif'  // TODO: 동적 렌더링 수정
                       : 'assets/characters/ditto.png',
+                  fit: BoxFit.contain,
                 ),
               ),
             ),
@@ -425,7 +444,7 @@ Future<void> _initializeSTT() async {
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         color: Color(0xFF000000),
-                        fontSize: 16,
+                        fontSize: 15,
                         height: 1.3,
                       ),
                     );
