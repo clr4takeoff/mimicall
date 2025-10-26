@@ -13,6 +13,7 @@ class FairyService {
   Function(String)? onChildSpeak;
 
   bool _isRunning = false;
+  bool get isRunning => _isRunning;
 
   String? contextText;
   List<String> targetPhrases = [];
@@ -28,6 +29,7 @@ class FairyService {
     contextText = context;
     targetPhrases = targets;
 
+    debugPrint("[FairyService] 요정 모드 시작");
     await _runFairyFlow();
   }
 
@@ -37,22 +39,30 @@ class FairyService {
     final userName = UserInfo.name ?? "unknown";
 
     // 1단계: 상황 제시
+    if (!_isRunning) return;
     final fairyLine1 = "요정이 왔어. ${contextText ?? "무슨 일이 생겼대."}";
     onFairySpeak?.call(fairyLine1);
     await tts.speak(fairyLine1, userName);
+    if (!_isRunning) return;
+
     await Future.delayed(const Duration(seconds: 1));
+    if (!_isRunning) return;
 
     // 2단계: 예시 제시
     final examples = targetPhrases.join(", ");
     final fairyLine2 = "이럴 땐 이렇게 말할 수도 있어. $examples.";
     onFairySpeak?.call(fairyLine2);
     await tts.speak(fairyLine2, userName);
+    if (!_isRunning) return;
+
     await Future.delayed(const Duration(seconds: 1));
+    if (!_isRunning) return;
 
     // 3단계: 모방 유도
     if (targetPhrases.isNotEmpty) {
       await _promptToRepeat(targetPhrases.first, userName);
     } else {
+      if (!_isRunning) return;
       final fairyLine3 = "지금은 예시가 없네. 다음에 같이 해보자.";
       onFairySpeak?.call(fairyLine3);
       await tts.speak(fairyLine3, userName);
@@ -61,18 +71,26 @@ class FairyService {
   }
 
   Future<void> _promptToRepeat(String phrase, String userName) async {
+    if (!_isRunning) return;
+
     final fairyLine = "자, 따라 말해볼까? '$phrase'";
     onFairySpeak?.call(fairyLine);
     await tts.speak(fairyLine, userName);
+    if (!_isRunning) return;
+
     await Future.delayed(const Duration(seconds: 1));
+    if (!_isRunning) return;
+
     await stt.startListening();
 
     stt.onResult = (text) async {
+      if (!_isRunning) return;
+
       await stt.stopListening();
       debugPrint("[FairyMode] User said: $text");
-
-      // 아이 발화 표시
       onChildSpeak?.call(text);
+
+      if (!_isRunning) return;
 
       if (text.contains(phrase)) {
         final success = "정말 잘했어! 바로 그거야!";
@@ -80,17 +98,38 @@ class FairyService {
         await tts.speak(success, userName);
         _isRunning = false;
       } else {
+        if (!_isRunning) return;
         final retry = "괜찮아. 다시 천천히 '$phrase' 말해볼까?";
         onFairySpeak?.call(retry);
         await tts.speak(retry, userName);
+        if (!_isRunning) return;
         await Future.delayed(const Duration(seconds: 1));
-        await _promptToRepeat(phrase, userName);
+        if (_isRunning) {
+          await _promptToRepeat(phrase, userName);
+        }
       }
     };
   }
 
+  /// 완전한 중단 (TTS/STT 모두 즉시 정지)
   Future<void> stopSession() async {
+    if (!_isRunning) return;
+
+    debugPrint("[FairyService] 요정 모드 즉시 중단 요청");
     _isRunning = false;
-    await stt.stopListening();
+
+    try {
+      await tts.stop();
+    } catch (_) {
+      debugPrint("[FairyService] TTS 정지 중 예외 무시");
+    }
+
+    try {
+      await stt.stopListening();
+    } catch (_) {
+      debugPrint("[FairyService] STT 정지 중 예외 무시");
+    }
+
+    debugPrint("[FairyService] 모든 TTS/STT 중단 완료");
   }
 }

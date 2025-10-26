@@ -326,14 +326,31 @@ Future<void> _initializeSTT() async {
         targets: targetList,
       );
     } else {
+      // 요정 모드 OFF
       await _fairyService.stopSession();
       _conversation.disableFairyMode();
 
+      // 현재 진행 중인 TTS 중단
+      await _ttsService.stop();
+
+      // GPT 컨텍스트 초기화 (기존 대화 맥락 유지)
+      gpt.resetCharacterContext();
+      _conversation.resetContext();
+
+      // 안내 문장 설정
+      const message = "잠깐 다른 친구랑 이야기하고 왔구나. 이제 다시 나랑 이야기하자.";
+
       setState(() {
         isFairyMode = false;
-        dummySpeech = "잠깐 다른 친구랑 이야기하고 왔구나. 나는 여전히 이런 상황을 겪고있어.";
+        dummySpeech = message;
       });
 
+      // 안내 문장을 TTS로 출력
+      final userName = UserInfo.name ?? "unknown";
+      await _ttsService.speak(message, userName);
+
+      // 잠시 대기 후 STT 재시작
+      await Future.delayed(const Duration(milliseconds: 500));
       _speechStartTime = DateTime.now();
       await _sttService.startListening();
     }
@@ -343,12 +360,18 @@ Future<void> _initializeSTT() async {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [
-              Color(0xFFFFE0F0), // 연핑크
-              Color(0xFFFFF9C4), // 연노랑
-              Color(0xFFB3E5FC), // 연하늘색
+            colors: isFairyMode
+                ? [
+              Color(0xFFD1C4E9),
+              Color(0xFFA9C2DE),
+              Color(0xFFB3E5FC),
+            ]
+                : [
+              Color(0xFFFFE0F0),
+              Color(0xFFFFF9C4),
+              Color(0xFFB3E5FC),
             ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -408,7 +431,7 @@ Future<void> _initializeSTT() async {
 
             Positioned(
               top: MediaQuery.of(context).size.height * 0.22,
-              child: TopBubble(text: dummySpeech),
+              child: TopBubble(text: dummySpeech, isFairyMode: isFairyMode,),
             ),
             Positioned(
               bottom: 160,

@@ -182,4 +182,19 @@ class ConversationService {
       debugPrint("[Firebase] 저장 오류: $e");
     }
   }
+
+
+  // 요정모드 종료 후 정상 대화 복귀용 초기화
+  void resetContext() {
+    debugPrint("[Conversation] 대화 컨텍스트 일부 초기화 (요정 모드 종료 후 복귀)");
+
+    isFairyMode = false;
+
+    // turnCount, conversationStage 유지!
+    _setupTtsListeners();
+
+    debugPrint("[Conversation] 요정 모드 종료 → 기존 대화 맥락 유지하며 복귀 완료");
+  }
+
+
 }

@@ -197,4 +197,11 @@ class GPTResponse {
     }
   }
 
+  /// 요정모드 종료 후 캐릭터 대화 컨텍스트 초기화
+  void resetCharacterContext() {
+    debugPrint("[GPT] 캐릭터 컨텍스트 초기화 (요정 모드 종료)");
+    _conversationHistory.clear(); // GPT 대화 기록만 초기화
+  }
+
+
 }
