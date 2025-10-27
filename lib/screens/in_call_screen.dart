@@ -247,12 +247,32 @@ Future<void> _initializeSTT() async {
       );
 
       // 이미지 생성 (옵션)
-      const bool useDalle = false;
-      final imagePrompt = "밝은 하늘 아래에서 $_characterName 이 미소 짓는 장면을 그려줘";
+      const bool useDalle = true; // 개발 테스트용 -> false
       String imageBase64 = "";
 
       if (useDalle) {
         try {
+          // DB에서 characterName과 summary 불러오기
+          final ref = FirebaseDatabase.instance.ref(widget.dbPath);
+          final snapshot = await ref.get();
+
+          String dbCharacterName = _characterSettings?.characterName ?? "캐릭터";
+          String dbSummary = "";
+
+          if (snapshot.exists) {
+            final data = Map<String, dynamic>.from(snapshot.value as Map);
+            dbCharacterName = data["characterName"] ?? dbCharacterName;
+            dbSummary = data["conversation"]?["summary"] ?? "";
+          }
+
+          // 프롬프트 구성
+          final imagePrompt = dbSummary.isNotEmpty
+              ? "$dbSummary\n이 내용을 바탕으로 $dbCharacterName 이(가) 등장하는 따뜻하고 밝은 분위기의 장면을 그려줘."
+              : "$dbCharacterName 이(가) 행복하게 미소 짓는 장면을 그려줘.";
+
+          debugPrint("[InCallScreen] 이미지 프롬프트: $imagePrompt");
+
+          // 이미지 생성 및 DB 저장
           imageBase64 = await gpt.generateAndSaveImageBase64(
             prompt: imagePrompt,
             dbPath: widget.dbPath,
