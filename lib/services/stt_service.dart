@@ -119,18 +119,18 @@ class STTService {
       }
 
       // 오인식 필터
-      // if (clean.contains("뉴스") ||
-      //     clean.contains("이덕영") ||
-      //     clean.contains("구독") ||
-      //     clean.contains("수고") ||
-      //     clean.contains("영상") ||
-      //     clean.contains("REMAX") ||
-      //     clean.contains("자막러") ||
-      //     clean.contains("시청")) {
-      //   debugPrint("[STT] 오인식된 문장 감지, 무시: $clean");
-      //   _isProcessing = false;
-      //   return;
-      // }
+      if (clean.contains("뉴스") ||
+          clean.contains("이덕영") ||
+          clean.contains("구독") ||
+          clean.contains("수고") ||
+          clean.contains("영상") ||
+          clean.contains("REMAX") ||
+          clean.contains("자막러") ||
+          clean.contains("시청")) {
+        debugPrint("[STT] 오인식된 문장 감지, 무시: $clean");
+        _isProcessing = false;
+        return;
+      }
 
       if (clean != _lastText) {
         _lastText = clean;

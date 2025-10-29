@@ -444,6 +444,16 @@ class _InCallScreenState extends State<InCallScreen> {
 
       final userName = UserInfo.name ?? "unknown";
       await _ttsService.speak(message, userName);
+
+      // 요정모드 콜백 해제 후 TTS 이벤트 원복
+      _ttsService.onComplete = () {
+        if (mounted) {
+          setState(() {
+            _isListening = false;
+          });
+        }
+        debugPrint("[InCallScreen] 캐릭터모드 복귀 — TTS 완료 후 마이크 활성화 가능");
+      };
     }
   }
 

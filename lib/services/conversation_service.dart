@@ -100,9 +100,16 @@ class ConversationService {
     };
 
     tts.onComplete = () async {
-      debugPrint("[Conversation] TTS 완료");
+      if (isFairyMode) {
+        debugPrint("[Conversation] Fairy mode active → STT 자동 시작 생략");
+        return; // 요정 모드일 때 자동으로 STT 켜지지 않음
+      }
+
+      debugPrint("[Conversation] TTS 완료 → STT 재시작 대기");
+      // 필요하면 자동 녹음 재개 로직 추가 가능
     };
   }
+
 
   Future<void> initialize() async {
     await stt.initialize();

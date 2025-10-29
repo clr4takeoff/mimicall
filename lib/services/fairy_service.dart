@@ -150,7 +150,7 @@ class FairyService {
     // 아이 반응에 따른 요정 피드백
     final systemPrompt = """
       너는 '요정'이야.
-      목표는 아이가 ${characterName}를 돕는 말을 스스로 말하도록 자연스럽게 유도하는 것.
+      목표는 아이가 ${characterName}가 ${contextText}에 처했을 때, 돕는 말을 스스로 말하도록 자연스럽게 유도하는 것.
       - 지나치게 명령하지 말기
       - 공감과 간단한 제안 위주
       - 다음 단계에서 targetSpeech를 연습하게끔 이어주기
@@ -271,6 +271,8 @@ class FairyService {
       await stt.stopListening();
     } catch (_) {}
 
+    tts.onComplete = null;
+    tts.onStart = null;
     debugPrint("[FairyService] 요정 모드 완전 종료");
   }
 }
