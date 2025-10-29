@@ -51,7 +51,7 @@ class _InCallScreenState extends State<InCallScreen> {
     _sttService = STTService(callId: "test_call_001");
     _ttsService = TTSService();
     _conversation = ConversationService(stt: _sttService, tts: _ttsService);
-    _fairyService = FairyService(tts: _ttsService, stt: _sttService);
+    _fairyService = FairyService(tts: _ttsService, stt: _sttService, gpt: gpt);
 
     _ttsService.playerStateStream.listen((state) {
       if (mounted) setState(() {});
@@ -387,56 +387,63 @@ class _InCallScreenState extends State<InCallScreen> {
 
   void _toggleFairyMode() async {
     if (!isFairyMode) {
-      // 요정 모드 ON 전 현재 STT/TTS 모두 중지
-      await _sttService.stopListening(tempStop: true);
+      // 모든 음성 중단 (캐릭터 말 완전히 멈춤)
       await _ttsService.stop();
+      await _sttService.stopListening(tempStop: true);
 
-      _conversation.enableFairyMode();
-
+      // UI 먼저 변경 (요정 등장)
       setState(() {
         isFairyMode = true;
-        dummySpeech = "요정이 나타났어! 같이 말해보자.";
+        dummySpeech = "✨요정이 나타났어! 너를 도와주러 왔어~✨";
       });
 
-      final context = _characterSettings?.contextText ?? "무슨 일이 생겼대.";
-      final targetList = (_characterSettings?.targetSpeech ?? '')
-          .split(',')
-          .map((e) => e.trim())
-          .where((e) => e.isNotEmpty)
-          .toList();
+      // 짧은 대기 (UI 반영 시간 확보)
+      await Future.delayed(const Duration(milliseconds: 600));
 
+      // 대화 로직 전환
+      _conversation.enableFairyMode();
+
+      // 요정 첫 인사 (겹치지 않게 순차 실행)
+      final userName = UserInfo.name ?? "unknown";
+
+      // 요정 인사 먼저 말하기
+      await _ttsService.speak("요정이 나타났어! 너를 도와주러 왔어.", userName);
+
+      // TTS 완전히 끝난 뒤 0.5초 대기 (MediaCodec 안정화 시간)
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // 이제 요정 모드 대화 시작
       await _fairyService.startGuidedSession(
-        context: context,
-        targets: targetList,
+        username: userName,
+        characterName: _characterSettings?.characterName ?? "캐릭터",
       );
 
-      // 요정 모드에서는 STT를 자동 시작하지 않음
-      // -> 사용자가 말하기 버튼으로 직접 제어
+
+      // 요정 Flow 시작
+      await _fairyService.startGuidedSession(
+        username: userName,
+        characterName: _characterSettings?.characterName ?? "캐릭터",
+      );
+
     } else {
-      // 💬 요정 모드 OFF
+      // 요정모드 종료
       await _fairyService.stopSession();
       _conversation.disableFairyMode();
-
-      // 현재 진행 중인 TTS 중단
       await _ttsService.stop();
-
-      // GPT 컨텍스트 초기화 (기존 대화 맥락 유지)
       gpt.resetCharacterContext();
       _conversation.resetContext();
 
-      // 안내 문장 설정
-      const message = "잠깐 다른 친구랑 이야기하고 왔구나. 이제 다시 나랑 이야기하자.";
-
+      const message = "요정이 쉬러 갔어~ 이제 다시 나랑 이야기하자 😊";
       setState(() {
         isFairyMode = false;
         dummySpeech = message;
       });
 
-      // 안내 문장을 TTS로 출력
       final userName = UserInfo.name ?? "unknown";
       await _ttsService.speak(message, userName);
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -512,7 +519,7 @@ class _InCallScreenState extends State<InCallScreen> {
             ),
 
             Positioned(
-              top: MediaQuery.of(context).size.height * 0.22,
+              top: MediaQuery.of(context).size.height * 0.25,
               child: TopBubble(text: dummySpeech, isFairyMode: isFairyMode,),
             ),
             Positioned(

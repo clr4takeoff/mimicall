@@ -32,13 +32,13 @@ class TTSService {
       'Authorization': 'Bearer $apiKey',
       'Content-Type': 'application/json',
     };
-    final body = '''
-    {
+
+    // 안전한 JSON 직렬화 방식으로 교체
+    final body = jsonEncode({
       "model": "gpt-4o-mini-tts",
       "voice": "alloy",
-      "input": "${text.replaceAll('"', '\\"')}"
-    }
-    ''';
+      "input": text,
+    });
 
     final response = await http.post(uri, headers: headers, body: body);
     if (response.statusCode != 200) {
@@ -64,6 +64,7 @@ class TTSService {
     _isPlaying = false;
     onComplete?.call();
   }
+
 
   Future<void> _speakWithElevenLabs(String text, String voiceId) async {
     final apiKey = dotenv.env['ELEVEN_API_KEY'];

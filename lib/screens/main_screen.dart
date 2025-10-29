@@ -9,7 +9,6 @@ class MainScreen extends StatelessWidget {
   final String? userName;
 
   const MainScreen({Key? key, this.userName}) : super(key: key);
-
   @override
   Widget build(BuildContext context) {
     final displayName = userName ?? UserInfo.name ?? "친구";
