@@ -24,6 +24,7 @@ class GPTResponse {
       대화의 맥락: $context
       목표는 아이가 자연스럽게 발화하도록 유도하는 거야.
       - 대답은 한 문장 이내로 간단하게
+      - 무조건 반말 사용하기
       - 따뜻하고 친근하게 말하기
       - 아이가 말을 따라 하거나 대답하도록 유도해줘.
       """;
@@ -45,12 +46,13 @@ class GPTResponse {
 
       _conversationHistory.removeWhere((m) => m["role"] == "system");
       final newSystemPrompt = """
-너는 3세~7세 아동의 언어 발달을 돕는 AI 친구야.
-이전 단계의 대화는 끝났고, 지금은 새로운 단계야.
-현재 대화 단계: $stageInstruction
-- 아이가 자발적으로 말하도록 유도하고
-- 따뜻하고 간결하게 말해줘.
-""";
+        너는 3세~7세 아동의 언어 발달을 돕는 AI 친구야.
+        이전 단계의 대화는 끝났고, 지금은 새로운 단계야.
+        현재 대화 단계: $stageInstruction
+        - 아이가 자발적으로 말하도록 유도하고
+        - 따뜻하고 간결하게 말해줘.
+        - 무조건 반말 사용하기
+        """;
 
       _conversationHistory.insert(0, {"role": "system", "content": newSystemPrompt});
       debugPrint("[GPT] 새로운 systemPrompt 설정 완료:\n$newSystemPrompt");

@@ -204,7 +204,7 @@ class _InCallScreenState extends State<InCallScreen> {
 
       final userName = UserInfo.name ?? "unknown";
       final stageInstruction =
-      await _conversation.getStageInstruction(username: userName);
+      await _conversation.getStageInstruction(username: userName, characterName: _characterName);
 
       // GPT 응답 생성
       final reply = await gpt.sendMessageToLLM(
@@ -496,7 +496,7 @@ class _InCallScreenState extends State<InCallScreen> {
             ),
 
             Positioned(
-              top: MediaQuery.of(context).size.height * 0.35,
+              top: MediaQuery.of(context).size.height * 0.4,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
                 height: 240,
@@ -505,7 +505,7 @@ class _InCallScreenState extends State<InCallScreen> {
                       ? 'assets/characters/fairy.png' // 요정모드일 때 이미지
                       : isSpeaking
                       ? 'assets/characters/character_talking.gif'  // TODO: 동적 렌더링 수정
-                      : 'assets/characters/ditto.png',
+                      : 'assets/characters/character.png',
                   fit: BoxFit.contain,
                 ),
               ),

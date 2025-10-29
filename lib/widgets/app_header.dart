@@ -46,7 +46,7 @@ class AppHeader extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               const Text(
-                '여기 어떤 것을 넣으면 좋을까...',
+                '오늘도 즐거운 하루 되길 :)',
                 style: TextStyle(
                   fontSize: 16,
                   color: Color(0xFF8D6E63),

@@ -77,7 +77,7 @@ class ConversationService {
   }
 
   // 단계별 프롬프트 반환
-  Future<String> getStageInstruction({required String username}) async {
+  Future<String> getStageInstruction({required String username, required String characterName,}) async {
     if (isFairyMode) {
       return "현재 요정 모드가 활성화되어 있어. 캐릭터는 대화하지 않고 요정이 아이의 발화를 도와주는 중이야.";
     }
@@ -86,7 +86,12 @@ class ConversationService {
       if (contextText == null) {
         await loadCharacterContext(username);
       }
-      return "지금은 2단계야. 너는 캐릭터인데, 상황은 '${contextText ?? "작은 문제가 생긴 상황"}' 이야. 아이에게 어떻게 해야 할지 물어봐.";
+      return """지금은 2단계야. 너는 캐릭터 ${characterName}이고, ${username}과 대화중이야.
+      너는 '${contextText ?? "작은 문제가 생긴 상황"}' 상황을 겪고 있어 곤란한 상황이야.
+      이 곤란함을 이야기하면서 이런 상황에서는 어떻게 말해야 할지 물어보며 도움을 요청해.
+      대화를 유도하며 ${username}를 널 구하는 영웅으로 만들어주어야 해.""";
+
+
     }
 
     switch (conversationStage) {

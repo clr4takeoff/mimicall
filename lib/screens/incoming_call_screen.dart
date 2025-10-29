@@ -100,7 +100,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
                 fit: BoxFit.cover,
               )
                   : Image.asset(
-                'assets/characters/ditto.png',
+                'assets/characters/character.png',
                 fit: BoxFit.cover,
               ),
             ),
@@ -137,7 +137,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
               height: 200,
             )
                 : Image.asset(
-              'assets/characters/ditto.png',
+              'assets/characters/character.png',
               height: 200,
             ),
           ),
