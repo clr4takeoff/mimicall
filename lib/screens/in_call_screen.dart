@@ -68,6 +68,11 @@ class _InCallScreenState extends State<InCallScreen> {
     };
 
     _ttsService.onComplete = () {
+      if (isFairyMode) {
+        debugPrint("[InCallScreen] FairyMode active → 마이크 상태 유지 (비활성)");
+        return;
+      }
+
       if (mounted) {
         setState(() {
           _isListening = false; // 여전히 비활성화 상태 유지
@@ -84,6 +89,7 @@ class _InCallScreenState extends State<InCallScreen> {
       if (!mounted) return;
       setState(() {
         dummySpeech = line;
+        _isListening = false;
       });
     };
 
@@ -396,9 +402,6 @@ class _InCallScreenState extends State<InCallScreen> {
         isFairyMode = true;
         dummySpeech = "✨요정이 나타났어! 너를 도와주러 왔어~✨";
       });
-
-      // 짧은 대기 (UI 반영 시간 확보)
-      await Future.delayed(const Duration(milliseconds: 600));
 
       // 대화 로직 전환
       _conversation.enableFairyMode();
