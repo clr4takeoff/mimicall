@@ -28,6 +28,7 @@ class _InCallScreenState extends State<InCallScreen> {
   bool _isFairyButtonEnabled = false;
   bool _isGreeting = false;
   bool _isListening = false; // 사용자가 현재 말하고 있는지 여부. 버튼 조작
+  bool _isThinking = false; // GPT 처리중
 
 
   String dummySpeech = "";
@@ -52,12 +53,31 @@ class _InCallScreenState extends State<InCallScreen> {
     _conversation = ConversationService(stt: _sttService, tts: _ttsService);
     _fairyService = FairyService(tts: _ttsService, stt: _sttService);
 
+    _ttsService.playerStateStream.listen((state) {
+      if (mounted) setState(() {});
+    });
+
+
     _ttsService.onStart = () {
-      if (mounted) setState(() {}); // 회색으로 바꾸기 (대화 불가)
+      if (mounted) {
+        setState(() {
+          _isListening = false; // 마이크 비활성화
+        });
+      }
+      debugPrint("[InCallScreen] TTS 시작 — 마이크 버튼 비활성화");
     };
+
     _ttsService.onComplete = () {
-      if (mounted) setState(() {}); // 초록색으로 복원 (대화 가능)
+      if (mounted) {
+        setState(() {
+          _isListening = false; // 여전히 비활성화 상태 유지
+        });
+      }
+      debugPrint("[InCallScreen] TTS 완료 — 마이크 다시 활성화 가능");
     };
+
+
+
 
     // 요정모드 말풍선 변경 콜백
     _fairyService.onFairySpeak = (line) {
@@ -101,16 +121,10 @@ class _InCallScreenState extends State<InCallScreen> {
     );
 
     await _ttsService.speak(greeting, UserInfo.name ?? "unknown").whenComplete(() {
-      // TTS 완전히 끝난 뒤 실행
       _isGreeting = false;
-      if (mounted) {
-        setState(() {
-          _isListening = false; // 마이크 버튼 활성화
-        });
-      }
-
       debugPrint("[InCallScreen] 초기 인사 완료 — 마이크 다시 활성화됨");
     });
+
   }
 
   Future<void> _loadCharacterSettings() async {
@@ -173,6 +187,7 @@ class _InCallScreenState extends State<InCallScreen> {
         debugPrint("[ResponseDelay] 아이 반응 시간: ${responseDelayMs}ms");
       }
 
+      // 아이 발화 텍스트 표시 + GPT 준비 상태 진입
       setState(() {
         childSpeech = text;
         final currentStage = _conversation.conversationStage;
@@ -180,6 +195,9 @@ class _InCallScreenState extends State<InCallScreen> {
           _isFairyButtonEnabled = true;
         }
         isSpeaking = true;
+
+        dummySpeech = "음... 생각 중이야";
+        _isThinking = true; // GPT 생각 중 → 마이크 회색 유지
       });
 
       _conversation.registerUserSpeech(text);
@@ -188,6 +206,7 @@ class _InCallScreenState extends State<InCallScreen> {
       final stageInstruction =
       await _conversation.getStageInstruction(username: userName);
 
+      // GPT 응답 생성
       final reply = await gpt.sendMessageToLLM(
         text,
         stageInstruction: stageInstruction,
@@ -195,8 +214,19 @@ class _InCallScreenState extends State<InCallScreen> {
 
       if (_isEndingCall || reply.isEmpty) return;
 
-      setState(() => dummySpeech = reply);
+      // GPT 응답 도착 시 — 말풍선 업데이트만 하고, 버튼은 계속 회색 유지
+      if (mounted) {
+        setState(() {
+          dummySpeech = reply; // 말풍선만 변경
+          // _isThinking 유지 (아직 TTS 시작 안 됨)
+        });
+      }
 
+      // TTS 실행 전, _isThinking을 false로 바꾸면서 onStart에서 회색 유지
+      _isThinking = false;
+      await _ttsService.speak(reply, UserInfo.name ?? "unknown");
+
+      // 대화 로그 저장
       await _conversation.saveMessage(
         dbPath: widget.dbPath,
         role: "user",
@@ -216,21 +246,15 @@ class _InCallScreenState extends State<InCallScreen> {
         timestamp: now.add(const Duration(milliseconds: 200)),
       );
 
-      if (_isEndingCall) return;
-
-      await _ttsService.speak(reply, UserInfo.name ?? "unknown");
-      await Future.delayed(const Duration(milliseconds: 800));
+      // 타이밍 기록 업데이트
       _lastAssistantEndTime = DateTime.now();
       _speechStartTime = null;
-
-      // 버튼 상태 복원: 사용자가 다시 눌러서 새 발화 시작
-      if (mounted) {
-        setState(() => _isListening = false);
-      }
 
       debugPrint("[InCallScreen] Whisper 결과 처리 완료 — STT 대기 상태로 전환됨");
     };
   }
+
+
 
   @override
   void dispose() {
@@ -268,7 +292,7 @@ class _InCallScreenState extends State<InCallScreen> {
       );
 
       // 이미지 생성 (옵션)
-      const bool useDalle = true; // 개발 테스트용 -> false
+      const bool useDalle = false; // 개발 테스트용 -> false
       String imageBase64 = "";
 
       if (useDalle) {
@@ -345,6 +369,7 @@ class _InCallScreenState extends State<InCallScreen> {
 
   // 말하기 버튼: STT 수동 제어
   Future<void> _toggleRecording() async {
+    if (_ttsService.isPlaying || _isGreeting) return;
     if (_isListening) {
       // 녹음 중 → 중지 + Whisper 전송
       setState(() => _isListening = false);
@@ -567,10 +592,13 @@ class _InCallScreenState extends State<InCallScreen> {
                     heroTag: 'mic',
                     backgroundColor: _isListening
                         ? const Color(0xFFed6b72)
-                        : (_ttsService.isPlaying || _isGreeting
+                        : (_isThinking || _ttsService.isPlaying || _isGreeting
                         ? Colors.grey
                         : const Color(0xFF68d94e)),
-                    onPressed: (_ttsService.isPlaying || _isGreeting) ? null : _toggleRecording,
+                    onPressed: (_isThinking || _ttsService.isPlaying || _isGreeting)
+                        ? null
+                        : _toggleRecording,
+
                     child: Icon(
                       _isListening ? Icons.stop : Icons.mic,
                       size: 32,

@@ -7,6 +7,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:firebase_database/firebase_database.dart';
 
+
 class TTSService {
   bool _isProcessing = false;
   bool _isPlaying = false; // 재생 상태 직접 관리
@@ -16,6 +17,8 @@ class TTSService {
 
   String? lastSpokenText;
   bool get isPlaying => _isPlaying;
+
+  Stream<PlayerState> get playerStateStream => _player.playerStateStream;
 
   Future<void> _speakWithOpenAI(String text) async {
     final apiKey = dotenv.env['OPENAI_API_KEY'];
@@ -108,20 +111,18 @@ class TTSService {
   Future<void> speak(String text, String userName) async {
     if (_isProcessing || text.trim().isEmpty) return;
     _isProcessing = true;
-
+    _isPlaying = true;
     lastSpokenText = text.trim();
 
     try {
       final elevenKey = dotenv.env['ELEVEN_API_KEY'];
 
-      // .env에 ElevenLabs 키가 없으면 OpenAI로 전환
       if (elevenKey == null || elevenKey.isEmpty) {
         debugPrint("[TTS] .env에 ELEVEN_API_KEY가 없어 OpenAI로 전환");
         await _speakWithOpenAI(text);
         return;
       }
 
-      // Firebase에서 voiceId 확인
       final ref = FirebaseDatabase.instance
           .ref("preference/$userName/character_settings/voiceId");
       final snapshot = await ref.get();
@@ -140,16 +141,21 @@ class TTSService {
     } finally {
       _isProcessing = false;
       _isPlaying = false;
-      onComplete?.call();
     }
   }
 
   Future<void> stop() async {
-    await _player.stop();
-    _isProcessing = false;
-    _isPlaying = false;
-    onComplete?.call();
+    try {
+      await _player.stop();
+    } catch (e) {
+      debugPrint("[TTS stop 오류] $e");
+    } finally {
+      _isProcessing = false;
+      _isPlaying = false;
+      onComplete?.call();
+    }
   }
+
 
   Future<void> dispose() async {
     await _player.dispose();
