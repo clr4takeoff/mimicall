@@ -26,6 +26,9 @@ class _InCallScreenState extends State<InCallScreen> {
   bool isFairyMode = false;
   bool _isEndingCall = false;
   bool _isFairyButtonEnabled = false;
+  bool _isGreeting = false;
+  bool _isListening = false; // 사용자가 현재 말하고 있는지 여부. 버튼 조작
+
 
   String dummySpeech = "";
   String childSpeech = "";
@@ -48,6 +51,13 @@ class _InCallScreenState extends State<InCallScreen> {
     _ttsService = TTSService();
     _conversation = ConversationService(stt: _sttService, tts: _ttsService);
     _fairyService = FairyService(tts: _ttsService, stt: _sttService);
+
+    _ttsService.onStart = () {
+      if (mounted) setState(() {}); // 회색으로 바꾸기 (대화 불가)
+    };
+    _ttsService.onComplete = () {
+      if (mounted) setState(() {}); // 초록색으로 복원 (대화 가능)
+    };
 
     // 요정모드 말풍선 변경 콜백
     _fairyService.onFairySpeak = (line) {
@@ -72,7 +82,14 @@ class _InCallScreenState extends State<InCallScreen> {
   }
 
   Future<void> _speakInitialGreeting() async {
-    final greeting = "안녕! 나는 $_characterName 이야. 오늘 뭐하고 있었어?";
+    _isGreeting = true; // 마이크 비활성화 시작
+    final lastChar = _characterName.characters.last;
+    final codeUnit = lastChar.codeUnitAt(0);
+    final hasBatchim = (codeUnit - 0xAC00) % 28 != 0; // 받침 여부 판별
+    final ending = hasBatchim ? "이야" : "야";
+
+    final greeting = "안녕! 나는 $_characterName$ending. 오늘 뭐하고 있었어?";
+
 
     setState(() => dummySpeech = greeting);
 
@@ -83,12 +100,17 @@ class _InCallScreenState extends State<InCallScreen> {
       text: greeting,
     );
 
-    await _ttsService.speak(greeting, UserInfo.name ?? "unknown");
+    await _ttsService.speak(greeting, UserInfo.name ?? "unknown").whenComplete(() {
+      // TTS 완전히 끝난 뒤 실행
+      _isGreeting = false;
+      if (mounted) {
+        setState(() {
+          _isListening = false; // 마이크 버튼 활성화
+        });
+      }
 
-
-    await Future.delayed(const Duration(seconds: 1));
-    _speechStartTime = DateTime.now();
-    await _sttService.startListening();
+      debugPrint("[InCallScreen] 초기 인사 완료 — 마이크 다시 활성화됨");
+    });
   }
 
   Future<void> _loadCharacterSettings() async {
@@ -123,88 +145,92 @@ class _InCallScreenState extends State<InCallScreen> {
     }
   }
 
-Future<void> _initializeSTT() async {
-  await _sttService.initialize();
+  Future<void> _initializeSTT() async {
+    await _sttService.initialize();
 
-  // 아이 발화 시작 시점 감지
-  _sttService.onSpeechDetected = () {
-    _speechStartTime = DateTime.now();
-    debugPrint("[InCallScreen] 아이 발화 시작 시점 기록됨");
-  };
+    // 아이 발화 시작 시점 감지
+    _sttService.onSpeechDetected = () {
+      _speechStartTime = DateTime.now();
+      debugPrint("[InCallScreen] 아이 발화 시작 시점 기록됨");
+    };
 
-  // Whisper 결과 수신 시 처리
-  _sttService.onResult = (text) async {
-    if (_isEndingCall || !mounted || text.isEmpty) return;
+    // Whisper 결과 수신 시 처리
+    _sttService.onResult = (text) async {
+      if (_isEndingCall || !mounted || text.isEmpty) return;
 
-    final now = DateTime.now();
+      final now = DateTime.now();
 
-    int? speechDurationMs;
-    if (_speechStartTime != null) {
-      speechDurationMs = now.difference(_speechStartTime!).inMilliseconds;
-      debugPrint("[SpeechDuration] 아이 발화 길이: ${speechDurationMs}ms");
-    }
-
-    int? responseDelayMs;
-    if (_lastAssistantEndTime != null && _speechStartTime != null) {
-      responseDelayMs =
-          _speechStartTime!.difference(_lastAssistantEndTime!).inMilliseconds;
-      debugPrint("[ResponseDelay] 아이 반응 시간: ${responseDelayMs}ms");
-    }
-
-    setState(() {
-      childSpeech = text;
-      final currentStage = _conversation.conversationStage;
-      if (currentStage >= 2 && !_isFairyButtonEnabled) {
-        _isFairyButtonEnabled = true;
+      int? speechDurationMs;
+      if (_speechStartTime != null) {
+        speechDurationMs = now.difference(_speechStartTime!).inMilliseconds;
+        debugPrint("[SpeechDuration] 아이 발화 길이: ${speechDurationMs}ms");
       }
-      isSpeaking = true;
-    });
 
-    _conversation.registerUserSpeech(text);
+      int? responseDelayMs;
+      if (_lastAssistantEndTime != null && _speechStartTime != null) {
+        responseDelayMs =
+            _speechStartTime!.difference(_lastAssistantEndTime!).inMilliseconds;
+        debugPrint("[ResponseDelay] 아이 반응 시간: ${responseDelayMs}ms");
+      }
 
-    final userName = UserInfo.name ?? "unknown";
-    final stageInstruction =
-    await _conversation.getStageInstruction(username: userName);
+      setState(() {
+        childSpeech = text;
+        final currentStage = _conversation.conversationStage;
+        if (currentStage >= 2 && !_isFairyButtonEnabled) {
+          _isFairyButtonEnabled = true;
+        }
+        isSpeaking = true;
+      });
 
-    final reply = await gpt.sendMessageToLLM(
-      text,
-      stageInstruction: stageInstruction,
-    );
+      _conversation.registerUserSpeech(text);
 
-    if (_isEndingCall || reply.isEmpty) return;
+      final userName = UserInfo.name ?? "unknown";
+      final stageInstruction =
+      await _conversation.getStageInstruction(username: userName);
 
-    setState(() => dummySpeech = reply);
+      final reply = await gpt.sendMessageToLLM(
+        text,
+        stageInstruction: stageInstruction,
+      );
 
-    await _conversation.saveMessage(
-      dbPath: widget.dbPath,
-      role: "user",
-      text: text,
-      timestamp: now,
-      extra: {
-        if (responseDelayMs != null) "responseDelayMs": responseDelayMs,
-        if (speechDurationMs != null) "speechDurationMs": speechDurationMs,
-      },
-    );
+      if (_isEndingCall || reply.isEmpty) return;
 
-    await Future.delayed(const Duration(milliseconds: 200));
-    await _conversation.saveMessage(
-      dbPath: widget.dbPath,
-      role: "z_assistant",
-      text: reply,
-      timestamp: now.add(const Duration(milliseconds: 200)),
-    );
+      setState(() => dummySpeech = reply);
 
-    await _sttService.stopListening(tempStop: true);
+      await _conversation.saveMessage(
+        dbPath: widget.dbPath,
+        role: "user",
+        text: text,
+        timestamp: now,
+        extra: {
+          if (responseDelayMs != null) "responseDelayMs": responseDelayMs,
+          if (speechDurationMs != null) "speechDurationMs": speechDurationMs,
+        },
+      );
 
-    if (_isEndingCall) return;
-    await _ttsService.speak(reply, UserInfo.name ?? "unknown");
-    await Future.delayed(const Duration(milliseconds: 800));
-    _lastAssistantEndTime = DateTime.now();
-    _speechStartTime = null;
-    await _sttService.startListening();
+      await Future.delayed(const Duration(milliseconds: 200));
+      await _conversation.saveMessage(
+        dbPath: widget.dbPath,
+        role: "z_assistant",
+        text: reply,
+        timestamp: now.add(const Duration(milliseconds: 200)),
+      );
 
-  };
-}
+      if (_isEndingCall) return;
+
+      await _ttsService.speak(reply, UserInfo.name ?? "unknown");
+      await Future.delayed(const Duration(milliseconds: 800));
+      _lastAssistantEndTime = DateTime.now();
+      _speechStartTime = null;
+
+      // 버튼 상태 복원: 사용자가 다시 눌러서 새 발화 시작
+      if (mounted) {
+        setState(() => _isListening = false);
+      }
+
+      debugPrint("[InCallScreen] Whisper 결과 처리 완료 — STT 대기 상태로 전환됨");
+    };
+  }
 
   @override
   void dispose() {
@@ -228,11 +254,6 @@ Future<void> _initializeSTT() async {
       await Future.wait([
         _sttService.stopListening().catchError((_) {}),
         _ttsService.stop().catchError((_) {}),
-      ]);
-
-      await Future.wait([
-        _sttService.dispose().catchError((_) {}),
-        _ttsService.dispose().catchError((_) {}),
       ]);
 
       if (!mounted) return;
@@ -322,8 +343,26 @@ Future<void> _initializeSTT() async {
     }
   }
 
+  // 말하기 버튼: STT 수동 제어
+  Future<void> _toggleRecording() async {
+    if (_isListening) {
+      // 녹음 중 → 중지 + Whisper 전송
+      setState(() => _isListening = false);
+      await _sttService.stopListening();
+      debugPrint("[InCallScreen] 사용자가 말하기 종료");
+    } else {
+      // 녹음 시작
+      await _ttsService.stop(); // 혹시 캐릭터가 말 중이면 중단
+      await _sttService.startListening();
+      setState(() => _isListening = true);
+      _speechStartTime = DateTime.now();
+      debugPrint("[InCallScreen] 사용자가 말하기 시작");
+    }
+  }
+
   void _toggleFairyMode() async {
     if (!isFairyMode) {
+      // 요정 모드 ON 전 현재 STT/TTS 모두 중지
       await _sttService.stopListening(tempStop: true);
       await _ttsService.stop();
 
@@ -345,8 +384,11 @@ Future<void> _initializeSTT() async {
         context: context,
         targets: targetList,
       );
+
+      // 요정 모드에서는 STT를 자동 시작하지 않음
+      // -> 사용자가 말하기 버튼으로 직접 제어
     } else {
-      // 요정 모드 OFF
+      // 💬 요정 모드 OFF
       await _fairyService.stopSession();
       _conversation.disableFairyMode();
 
@@ -368,11 +410,6 @@ Future<void> _initializeSTT() async {
       // 안내 문장을 TTS로 출력
       final userName = UserInfo.name ?? "unknown";
       await _ttsService.speak(message, userName);
-
-      // 잠시 대기 후 STT 재시작
-      await Future.delayed(const Duration(milliseconds: 500));
-      _speechStartTime = DateTime.now();
-      await _sttService.startListening();
     }
   }
 
@@ -515,12 +552,30 @@ Future<void> _initializeSTT() async {
                       color: Colors.white,
                     ),
                   ),
-                  const SizedBox(width: 70),
+                  const SizedBox(width: 40),
+
                   FloatingActionButton(
                     heroTag: 'end',
                     backgroundColor: const Color(0xFFFF6B6B),
                     onPressed: _onEndCall,
                     child: const Icon(Icons.call_end, size: 36),
+                  ),
+
+                  const SizedBox(width: 40),
+
+                  FloatingActionButton(
+                    heroTag: 'mic',
+                    backgroundColor: _isListening
+                        ? const Color(0xFFed6b72)
+                        : (_ttsService.isPlaying || _isGreeting
+                        ? Colors.grey
+                        : const Color(0xFF68d94e)),
+                    onPressed: (_ttsService.isPlaying || _isGreeting) ? null : _toggleRecording,
+                    child: Icon(
+                      _isListening ? Icons.stop : Icons.mic,
+                      size: 32,
+                      color: Colors.white,
+                    ),
                   ),
                 ],
               ),

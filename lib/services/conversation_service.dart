@@ -45,9 +45,7 @@ class ConversationService {
     };
 
     tts.onComplete = () async {
-      debugPrint("[Conversation] TTS 완료 → STT 재개");
-      await Future.delayed(const Duration(seconds: 2));
-      await stt.startListening();
+      debugPrint("[Conversation] TTS 완료");
     };
   }
 

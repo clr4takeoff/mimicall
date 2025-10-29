@@ -9,12 +9,13 @@ import 'package:firebase_database/firebase_database.dart';
 
 class TTSService {
   bool _isProcessing = false;
+  bool _isPlaying = false; // 재생 상태 직접 관리
   Function()? onStart;
   Function()? onComplete;
   final AudioPlayer _player = AudioPlayer();
 
-  String? lastSpokenText; // 최근 발화 저장
-  bool get isPlaying => _player.playing;
+  String? lastSpokenText;
+  bool get isPlaying => _isPlaying;
 
   Future<void> _speakWithOpenAI(String text) async {
     final apiKey = dotenv.env['OPENAI_API_KEY'];
@@ -49,11 +50,15 @@ class TTSService {
     await file.writeAsBytes(bytes);
 
     await _player.setFilePath(file.path);
+    _isPlaying = true;
     onStart?.call();
+
     await _player.play();
     await _player.processingStateStream.firstWhere(
           (s) => s == ProcessingState.completed,
     );
+
+    _isPlaying = false;
     onComplete?.call();
   }
 
@@ -91,8 +96,12 @@ class TTSService {
     await file.writeAsBytes(bytes);
 
     await _player.setFilePath(file.path);
+    _isPlaying = true;
     onStart?.call();
+
     await _player.play();
+
+    _isPlaying = false;
     onComplete?.call();
   }
 
@@ -100,19 +109,19 @@ class TTSService {
     if (_isProcessing || text.trim().isEmpty) return;
     _isProcessing = true;
 
-    lastSpokenText = text.trim(); // 최근 발화 저장
+    lastSpokenText = text.trim();
 
     try {
       final elevenKey = dotenv.env['ELEVEN_API_KEY'];
 
-      // ① .env에 ElevenLabs 키가 없으면 → 바로 OpenAI로 이동
+      // .env에 ElevenLabs 키가 없으면 OpenAI로 전환
       if (elevenKey == null || elevenKey.isEmpty) {
         debugPrint("[TTS] .env에 ELEVEN_API_KEY가 없어 OpenAI로 전환");
         await _speakWithOpenAI(text);
         return;
       }
 
-      // ② ElevenLabs 키가 있으면, Firebase에서 voiceId 확인
+      // Firebase에서 voiceId 확인
       final ref = FirebaseDatabase.instance
           .ref("preference/$userName/character_settings/voiceId");
       final snapshot = await ref.get();
@@ -125,18 +134,21 @@ class TTSService {
         debugPrint("[TTS] voiceId 없음 → 기본 OpenAI 음성 사용");
         await _speakWithOpenAI(text);
       }
-
     } catch (e) {
       debugPrint("[TTS 예외] $e");
-      await _speakWithOpenAI(text); // 안전망 fallback
+      await _speakWithOpenAI(text); // 예외 발생 시 fallback
     } finally {
       _isProcessing = false;
+      _isPlaying = false;
+      onComplete?.call();
     }
   }
 
   Future<void> stop() async {
     await _player.stop();
     _isProcessing = false;
+    _isPlaying = false;
+    onComplete?.call();
   }
 
   Future<void> dispose() async {
