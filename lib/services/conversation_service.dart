@@ -8,12 +8,12 @@ class ConversationService {
   final STTService stt;
   final TTSService tts;
 
-  int turnCount = 0; // 아이 발화 횟수
+  int turnCount = 0;
   int conversationStage = 1; // 1=라포, 2=도움요청, 3=마무리
-  String? contextText; // Firebase에서 불러온 캐릭터 상황
-  List<String> targetSpeechList = []; // 목표 발화 문장 목록
+  String? contextText;
+  List<String> targetSpeechList = [];
 
-  bool isFairyMode = false; // 요정 모드 상태
+  bool isFairyMode = false;
 
   ConversationService({
     required this.stt,
@@ -22,7 +22,6 @@ class ConversationService {
     _setupTtsListeners();
   }
 
-  // Firebase에서 캐릭터 상황(contextText) 불러오기
   Future<void> loadCharacterContext(String username) async {
     try {
       final ref = _db.child('preference/$username/character_settings/contextText');
@@ -38,7 +37,6 @@ class ConversationService {
     }
   }
 
-  // Firebase에서 목표 발화(targetSpeech) 불러오기
   Future<void> loadTargetSpeech(String username) async {
     try {
       final ref = _db.child('preference/$username/character_settings/targetSpeech');
@@ -64,7 +62,7 @@ class ConversationService {
     required String characterName,
   }) async {
     if (isFairyMode) {
-      return "현재 요정 모드가 활성화되어 있어. 캐릭터는 대화하지 않고 요정이 아이의 발화를 도와주는 중이야.";
+      return "현재 요정 모드야. 캐릭터는 대화하지 않고 요정이 아이 발화를 돕고 있어.";
     }
 
     if (conversationStage == 2) {
@@ -72,27 +70,24 @@ class ConversationService {
         await loadCharacterContext(username);
       }
       return """
-        지금은 2단계야. 너는 캐릭터 $characterName이고, $username과 대화 중이야.
-        너는 '${contextText ?? "작은 문제가 생긴 상황"}' 상황을 겪고 있어 곤란한 상태야.
-        이 상황을 설명하면서 어떻게 해야 할지 물어보며 도움을 요청해.
-        절대 정답을 이야기해주지 말고, 힌트도 주지 마. 주는 역할은 따로 있어.
-        대화 주제도 돌리지 마.
-        $username이 널 도와주는 영웅처럼 느끼게 해줘.
-        """;
-        }
+      지금은 2단계야. 너는 캐릭터 $characterName이고, $username과 대화 중이야.
+      너는 '${contextText ?? "작은 문제가 생긴 상황"}' 상황을 겪고 있어 곤란한 상태야.
+      이 상황을 설명하면서 도움을 요청해.
+      정답은 말하지 말고, 힌트도 주지 마.
+      $username이 너를 도와주는 영웅처럼 느끼게 해줘.
+      """;
+    }
 
     switch (conversationStage) {
       case 1:
         return "지금은 1단계야. 아이와 친해지고 편안하게 대화해.";
       case 3:
-        return "지금은 3단계야. 아이의 도움으로 문제가 해결됐고, 고맙다고 말하며 대화를 마무리해.";
+        return "지금은 3단계야. 아이가 도와줘서 문제가 해결됐어. 고맙다고 말하며 대화를 마무리해.";
       default:
         return "항상 따뜻하고 친근하게 대화해.";
     }
   }
 
-
-  // TTS 재생 중 STT를 일시정지
   void _setupTtsListeners() {
     tts.onStart = () async {
       debugPrint("[Conversation] TTS 시작 → STT 일시정지");
@@ -102,20 +97,16 @@ class ConversationService {
     tts.onComplete = () async {
       if (isFairyMode) {
         debugPrint("[Conversation] Fairy mode active → STT 자동 시작 생략");
-        return; // 요정 모드일 때 자동으로 STT 켜지지 않음
+        return;
       }
-
       debugPrint("[Conversation] TTS 완료 → STT 재시작 대기");
-      // 필요하면 자동 녹음 재개 로직 추가 가능
     };
   }
-
 
   Future<void> initialize() async {
     await stt.initialize();
   }
 
-  // 요정 모드 활성화/비활성화
   void enableFairyMode() {
     isFairyMode = true;
     debugPrint("[Conversation] 요정 모드 활성화");
@@ -126,75 +117,75 @@ class ConversationService {
     debugPrint("[Conversation] 요정 모드 비활성화");
   }
 
-  // 대화 단계 갱신
-  // 1~2단계는 turnCount 기준으로 자동 진행
-  // 3단계는 목표 발화 조건을 충족해야 진입 가능
   void _updateConversationStage() {
     if (turnCount < 3) {
-      conversationStage = 1; // 라포 형성
+      conversationStage = 1;
     } else if (turnCount < 6) {
-      conversationStage = 2; // 도움 요청
+      conversationStage = 2;
     } else {
-      conversationStage = 2; // 기본적으로 2단계 유지 (자동으로 3단계 전환 금지)
+      conversationStage = 2;
     }
   }
 
-  // 아이 발화 감지 시 처리
   void registerUserSpeech(String userText) {
     if (userText.trim().isEmpty) return;
 
     turnCount++;
 
     if (isFairyMode) {
-      debugPrint("[Conversation] 요정 모드 중이므로 단계 변경 생략");
+      debugPrint("[Conversation] 요정 모드 중 → 단계 변경 생략");
       return;
     }
 
     final prevStage = conversationStage;
     _updateConversationStage();
 
-    // 2단계에서 목표 발화와 유사한 문장을 말한 경우 3단계로 전환
-    if (conversationStage == 2 && _isSimilarToTargetSpeech(userText)) {
+    final matched = _isSimilarToTargetSpeech(userText);
+    if (conversationStage == 2 && matched) {
       conversationStage = 3;
-      debugPrint("[Conversation] 아이가 목표 발화를 유사하게 말함 → 3단계 전환");
+      debugPrint("[Conversation] 목표 발화 유사 감지 → 3단계 전환");
+    } else {
+      debugPrint("[Conversation] 발화 감지 | 턴: $turnCount | 단계: ${_stageName(conversationStage)}");
     }
-
-    debugPrint("[Conversation] 발화 감지 | 턴: $turnCount | 단계: ${_stageName(conversationStage)}");
 
     if (conversationStage != prevStage) {
       debugPrint("[Conversation] 단계 전환 → ${_stageName(conversationStage)}");
     }
   }
 
-  // 목표 발화와의 유사도 검사
   bool _isSimilarToTargetSpeech(String userText) {
-    if (targetSpeechList.isEmpty) return false;
+    if (targetSpeechList.isEmpty) {
+      debugPrint("[Conversation] targetSpeechList 비어 있음 (Firebase 로드 실패 가능)");
+      return false;
+    }
 
-    final normalizedUser = userText.replaceAll(RegExp(r'\s+'), '').toLowerCase();
+    final normalizedUser = userText.replaceAll(RegExp(r'[\s,.!?]'), '').toLowerCase();
 
     for (final target in targetSpeechList) {
-      final normalizedTarget = target.replaceAll(RegExp(r'\s+'), '').toLowerCase();
+      final normalizedTarget = target.replaceAll(RegExp(r'[\s,.!?]'), '').toLowerCase();
 
-      // 포함 관계면 바로 true
       if (normalizedUser.contains(normalizedTarget) ||
           normalizedTarget.contains(normalizedUser)) {
+        debugPrint("[Conversation] 직접 포함 매칭 감지: $target");
         return true;
       }
 
-      // Levenshtein 거리 기반 유사도 검사
       final distance = _levenshteinDistance(normalizedUser, normalizedTarget);
       final maxLen = normalizedUser.length > normalizedTarget.length
           ? normalizedUser.length
           : normalizedTarget.length;
       final similarity = 1 - (distance / maxLen);
 
-      if (similarity > 0.7) return true;
+      if (similarity > 0.6) {
+        debugPrint("[Conversation] 유사도 매칭 감지 ($similarity): $target");
+        return true;
+      }
     }
 
+    debugPrint("[Conversation] 목표 문장 불일치: $userText");
     return false;
   }
 
-  // 문자열 유사도 계산 (Levenshtein 거리)
   int _levenshteinDistance(String a, String b) {
     final m = a.length;
     final n = b.length;
@@ -209,9 +200,9 @@ class ConversationService {
       for (var j = 1; j <= n; j++) {
         final cost = a[i - 1] == b[j - 1] ? 0 : 1;
         dp[i][j] = [
-          dp[i - 1][j] + 1, // 삭제
-          dp[i][j - 1] + 1, // 삽입
-          dp[i - 1][j - 1] + cost, // 교체
+          dp[i - 1][j] + 1,
+          dp[i][j - 1] + 1,
+          dp[i - 1][j - 1] + cost,
         ].reduce((a, b) => a < b ? a : b);
       }
     }
@@ -232,10 +223,9 @@ class ConversationService {
     }
   }
 
-  // Firebase에 대화 내용 저장
   Future<void> saveMessage({
     required String dbPath,
-    required String role, // "user" or "assistant"
+    required String role,
     required String text,
     DateTime? timestamp,
     Map<String, dynamic>? extra,
@@ -252,11 +242,11 @@ class ConversationService {
           .replaceAll('T', '_');
 
       final now = timestamp ?? DateTime.now();
-      final adjustedTime = role == "user"
-          ? now
-          : now.add(const Duration(milliseconds: 1));
+      final adjustedTime =
+      role == "user" ? now : now.add(const Duration(milliseconds: 1));
 
-      final msgId = "msg_${adjustedTime.toIso8601String().replaceAll('T', '_').split('.').first}_$role";
+      final msgId =
+          "msg_${adjustedTime.toIso8601String().replaceAll('T', '_').split('.').first}_$role";
       final msgRef = _db.child('$safePath/conversation/messages/$msgId');
 
       await msgRef.set({
@@ -274,7 +264,6 @@ class ConversationService {
     }
   }
 
-  // 요정 모드 종료 후 초기화
   void resetContext() {
     debugPrint("[Conversation] 요정 모드 종료 후 컨텍스트 초기화");
     isFairyMode = false;

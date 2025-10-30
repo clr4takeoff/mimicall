@@ -108,6 +108,7 @@ class FairyService {
       - 아이가 먼저 반응할 수 있도록 잠시 기다려줘 (Time Delay)
       - 정답은 targetSpeech 리스트에서 참고해줘.
       - 예시는 간단히, 감정 표현은 풍부하게 해줘.
+      - 출력 문장은 3문장 이내로 해줘.
     """;
 
     final userPrompt = "캐릭터의 상황: ${contextText ?? '무슨 일이 생겼대.'}";
@@ -119,16 +120,12 @@ class FairyService {
     // TTS 완료 후 Time Delay를 두고 사용자 차례 신호만 보냄
     tts.onComplete = () async {
       if (!_isRunning) return;
-
-      // Time Delay (아이의 주도적 반응 기회 제공)
       debugPrint("[FairyService] TTS 완료 → Time Delay 대기 중...");
-      await Future.delayed(const Duration(seconds: 5));
-
-      // 이제 아이 차례 (PTT 버튼만 활성화하도록 신호)
+      await Future.delayed(const Duration(seconds: 2));
       _awaitingUser = true;
-      onReadyForMic?.call();
-      debugPrint("[FairyService] Time Delay 종료 → onReadyForMic 호출");
+      debugPrint("[FairyService] Time Delay 종료 → 사용자 차례 대기 (자동 마이크 X)");
     };
+
   }
 
   /// InCallScreen에서 버튼으로 녹음 종료 후 전달되는 사용자 발화 처리
@@ -147,41 +144,68 @@ class FairyService {
     onChildSpeak?.call(childText);
     debugPrint("[FairyService] 사용자의 자발적 발화 수신: $childText");
 
-    // 아이 반응에 따른 요정 피드백
+    // targetSpeech(목표 문장) 달성 여부 확인
+    final matchedPhrase = targetPhrases.firstWhere(
+          (p) => p.isNotEmpty && childText.contains(p),
+      orElse: () => "",
+    );
+
+    if (matchedPhrase.isNotEmpty) {
+      final praise = "우와~ 완벽해! '${matchedPhrase}'라고 정말 잘 말했어! 이제 이 말을 캐릭터에게 알려주러 가자!";
+      onFairySpeak?.call(praise);
+      await tts.speak(praise, userName);
+
+      // 더 이상 사용자 차례 X (요정 말만 하고 정지)
+      tts.onComplete = () async {
+        if (!_isRunning) return;
+        _awaitingUser = false;
+        debugPrint("[FairyService] 목표 문장 성공 발화 후 — 대기 종료 (다음 입력 받지 않음)");
+      };
+      return;
+    }
+
+
+    // (목표 문장 아직 아님) → GPT 기반 피드백/유도 대화 계속
+    final targetSpeechHint =
+    targetPhrases.isNotEmpty ? targetPhrases.join(', ') : "특정 목표 문장 없음";
+
     final systemPrompt = """
-      너는 '요정'이야.
-      목표는 아이가 ${characterName}가 ${contextText}에 처했을 때, 돕는 말을 스스로 말하도록 자연스럽게 유도하는 것.
-      - 지나치게 명령하지 말기
-      - 공감과 간단한 제안 위주
-      - 다음 단계에서 targetSpeech를 연습하게끔 이어주기
-    """;
+  너는 '요정'이야.
+  ${characterName}가 ${contextText}에 처했을 때,
+  아이가 스스로 도와주려는 말을 하도록 자연스럽게 유도해줘.
+  - 참고할 목표 문장: $targetSpeechHint
+  - 명령하지 말고 따뜻하고 공감적으로 말하기
+  - 아이의 감정에 반응해주기
+  - 너무 길지 않게 2~3문장 이내로 대답하기
+  """;
 
     final followUpPrompt = """
-      아이가 이렇게 말했어: "$childText"
-      이에 맞게 요정이 따뜻하게 반응하면서,
-      자연스럽게 목표 발화를 연습하자고 제안해줘.
-      targetSpeech 참고: ${targetPhrases.join(', ')}
-    """;
+  아이가 이렇게 말했어: "$childText"
+  이에 맞게 요정이 자연스럽게 대답해줘.
+  """;
+    debugPrint("🧚 [FairyService] === GPT 호출 시작 ===");
+    debugPrint("👶 STT 결과 (아이 발화): $childText");
+    debugPrint("📜 System Prompt ↓↓↓\n$systemPrompt");
+    debugPrint("💬 Follow-up Prompt ↓↓↓\n$followUpPrompt");
+
 
     final followUp = await gpt.fetchPromptResponse(systemPrompt, followUpPrompt);
-    onFairySpeak?.call(followUp);
-    await tts.speak(followUp, userName);
 
-    // 다음 단계: 따라 말하기 유도 (Model + Prompt Fading)
+    onFairySpeak?.call(followUp);
+
     tts.onComplete = () async {
       if (!_isRunning) return;
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      if (targetPhrases.isNotEmpty) {
-        await _promptToRepeatWithFading(targetPhrases.first, userName);
-      } else {
-        final fallback = "지금은 알려줄 말이 없네. 그래도 네가 정말 잘하고 있어!";
-        onFairySpeak?.call(fallback);
-        await tts.speak(fallback, userName);
-        _completeAndReturnToCharacter();
-      }
+      _awaitingUser = true;
+      debugPrint("[FairyService] 요정 발화 종료 → 사용자 차례 대기 (자동 마이크 X)");
     };
+
+    await tts.speak(followUp, userName);
   }
+
+
+
+
+
 
   /// Model + Prompt Fading + Reinforcement
   Future<void> _promptToRepeatWithFading(

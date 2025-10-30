@@ -46,22 +46,73 @@ class _InCallScreenState extends State<InCallScreen> {
   late ConversationService _conversation;
 
   @override
+  @override
   void initState() {
     super.initState();
+
+    // 서비스 초기화
     _sttService = STTService(callId: "test_call_001");
     _ttsService = TTSService();
     _conversation = ConversationService(stt: _sttService, tts: _ttsService);
     _fairyService = FairyService(tts: _ttsService, stt: _sttService, gpt: gpt);
 
+    // FairyService 콜백 등록 (가장 먼저 설정)
+    _fairyService.onReadyForMic = () {
+      if (!mounted) return;
+      setState(() {
+        _isThinking = false;   // 생각 중 아님
+        _isGreeting = false;   // 인사 중 아님
+        _isListening = false;  // 아직 녹음 시작 전 (버튼은 눌러질 수 있게)
+      });
+      debugPrint("[InCallScreen] Fairy → 마이크 사용 준비됨 (버튼 활성화)");
+    };
+
+    _fairyService.onFairyComplete = () async {
+      if (!mounted) return;
+      await _fairyService.stopSession();
+      _conversation.disableFairyMode();
+      await _ttsService.stop();
+      gpt.resetCharacterContext();
+      _conversation.resetContext();
+
+      const message = "요정이 쉬러 갔어~ 이제 다시 나랑 이야기하자 😊";
+      setState(() {
+        isFairyMode = false;
+        dummySpeech = message;
+        _isThinking = false;
+        _isGreeting = false;
+        _isListening = false;
+      });
+
+      final userName = UserInfo.name ?? "unknown";
+      await _ttsService.speak(message, userName);
+
+      _ttsService.onComplete = () {
+        if (mounted) {
+          setState(() {
+            _isListening = false;
+          });
+        }
+        debugPrint("[InCallScreen] 캐릭터모드 복귀 — TTS 완료 후 마이크 활성화 가능");
+      };
+    };
+
+    // TTS 상태 스트림 감시 (음성 재생 중/완료 등)
     _ttsService.playerStateStream.listen((state) {
-      if (mounted) setState(() {});
+      if (mounted) {
+        setState(() {
+          // player 상태 변화에 따른 UI 갱신
+          _isListening = false;
+        });
+      }
+      debugPrint("[InCallScreen] TTS 완료 — 마이크 다시 활성화 가능");
     });
 
-
+    // TTS 시작 / 완료 이벤트 설정
     _ttsService.onStart = () {
       if (mounted) {
         setState(() {
-          _isListening = false; // 마이크 비활성화
+          _isListening = false; // 말하는 동안 마이크 비활성화
         });
       }
       debugPrint("[InCallScreen] TTS 시작 — 마이크 버튼 비활성화");
@@ -75,16 +126,13 @@ class _InCallScreenState extends State<InCallScreen> {
 
       if (mounted) {
         setState(() {
-          _isListening = false; // 여전히 비활성화 상태 유지
+          _isListening = false; // 다시 마이크 활성화 가능
         });
       }
       debugPrint("[InCallScreen] TTS 완료 — 마이크 다시 활성화 가능");
     };
 
-
-
-
-    // 요정모드 말풍선 변경 콜백
+    // 요정 모드 말풍선 업데이트
     _fairyService.onFairySpeak = (line) {
       if (!mounted) return;
       setState(() {
@@ -100,7 +148,7 @@ class _InCallScreenState extends State<InCallScreen> {
       });
     };
 
-
+    // 캐릭터 설정 및 STT 초기화 후 인사 발화
     _loadCharacterSettings().then((_) async {
       await _initializeSTT();
       Future.delayed(const Duration(seconds: 1), _speakInitialGreeting);
@@ -138,8 +186,7 @@ class _InCallScreenState extends State<InCallScreen> {
       final childName = UserInfo.name;
       if (childName == null) return;
 
-      final ref =
-      FirebaseDatabase.instance.ref('preference/$childName/character_settings');
+      final ref = FirebaseDatabase.instance.ref('preference/$childName/character_settings');
       final snapshot = await ref.get();
 
       if (snapshot.exists) {
@@ -159,11 +206,16 @@ class _InCallScreenState extends State<InCallScreen> {
           style: settings.speakingStyle,
           targetSpeechCount: settings.targetSpeechCount,
         );
+
+        // 목표 발화 불러오기 (이 부분 추가!)
+        await _conversation.loadTargetSpeech(childName);
+        debugPrint("[InCallScreen] Target speech 불러오기 완료: ${_conversation.targetSpeechList}");
       }
     } catch (e) {
       debugPrint("캐릭터 설정 불러오기 실패: $e");
     }
   }
+
 
   Future<void> _initializeSTT() async {
     await _sttService.initialize();
@@ -180,6 +232,15 @@ class _InCallScreenState extends State<InCallScreen> {
 
       final now = DateTime.now();
 
+      // 요정모드면 FairyService로 넘기고 나머지 로직 스킵
+      if (isFairyMode) {
+        debugPrint("[InCallScreen] 요정모드 음성 인식 결과 감지 → FairyService.handleUserText() 호출");
+        final userName = UserInfo.name ?? "unknown";
+        await _fairyService.handleUserText(text, _characterName, userName);
+        return;
+      }
+
+      // ===== 캐릭터 일반 대화 모드 =====
       int? speechDurationMs;
       if (_speechStartTime != null) {
         speechDurationMs = now.difference(_speechStartTime!).inMilliseconds;
@@ -209,8 +270,10 @@ class _InCallScreenState extends State<InCallScreen> {
       _conversation.registerUserSpeech(text);
 
       final userName = UserInfo.name ?? "unknown";
-      final stageInstruction =
-      await _conversation.getStageInstruction(username: userName, characterName: _characterName);
+      final stageInstruction = await _conversation.getStageInstruction(
+        username: userName,
+        characterName: _characterName,
+      );
 
       // GPT 응답 생성
       final reply = await gpt.sendMessageToLLM(
@@ -298,7 +361,7 @@ class _InCallScreenState extends State<InCallScreen> {
       );
 
       // 이미지 생성 (옵션)
-      const bool useDalle = false; // 개발 테스트용 -> false
+      const bool useDalle = true; // 개발 테스트용 -> false
       String imageBase64 = "";
 
       if (useDalle) {
