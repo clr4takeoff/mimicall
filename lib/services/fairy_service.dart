@@ -115,7 +115,8 @@ class FairyService {
     final intro = await gpt.fetchPromptResponse(systemPrompt, userPrompt);
 
     onFairySpeak?.call(intro);
-    await tts.speak(intro, userName);
+    await tts.speak(intro, userName, isFairyMode: true);
+
 
     // TTS 완료 후 Time Delay를 두고 사용자 차례 신호만 보냄
     tts.onComplete = () async {
@@ -153,7 +154,8 @@ class FairyService {
     if (matchedPhrase.isNotEmpty) {
       final praise = "우와~ 완벽해! '${matchedPhrase}'라고 정말 잘 말했어! 이제 이 말을 캐릭터에게 알려주러 가자!";
       onFairySpeak?.call(praise);
-      await tts.speak(praise, userName);
+      await tts.speak(praise, userName, isFairyMode: true);
+
 
       // 더 이상 사용자 차례 X (요정 말만 하고 정지)
       tts.onComplete = () async {
@@ -199,7 +201,8 @@ class FairyService {
       debugPrint("[FairyService] 요정 발화 종료 → 사용자 차례 대기 (자동 마이크 X)");
     };
 
-    await tts.speak(followUp, userName);
+    await tts.speak(followUp, userName, isFairyMode: true);
+
   }
 
 
@@ -227,7 +230,8 @@ class FairyService {
     _repeatTargetPhrase = phrase;
 
     onFairySpeak?.call(prompt);
-    await tts.speak(prompt, userName);
+    await tts.speak(prompt, userName, isFairyMode: true);
+
 
     // 자동 STT 시작 금지. TTS 종료 후 잠시 대기하고 PTT 버튼 허용 신호만 보냄.
     tts.onComplete = () async {
@@ -257,12 +261,12 @@ class FairyService {
       // Natural Reinforcement + Affective Engagement
       final praise = "우와~ 완벽해! 이제 이 말을 캐릭터에게 알려주러 가자!";
       onFairySpeak?.call(praise);
-      await tts.speak(praise, userName);
+      await tts.speak(praise, userName, isFairyMode: true);
       _completeAndReturnToCharacter();
     } else {
       final retry = "괜찮아~ 천천히 다시 한 번 해보자.";
       onFairySpeak?.call(retry);
-      await tts.speak(retry, userName);
+      await tts.speak(retry, userName, isFairyMode: true);
 
       // 재도전 기회 제공
       await Future.delayed(const Duration(seconds: 1));

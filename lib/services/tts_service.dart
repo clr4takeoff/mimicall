@@ -109,7 +109,7 @@ class TTSService {
     onComplete?.call();
   }
 
-  Future<void> speak(String text, String userName) async {
+  Future<void> speak(String text, String userName, {bool isFairyMode = false}) async {
     if (_isProcessing || text.trim().isEmpty) return;
     _isProcessing = true;
     _isPlaying = true;
@@ -117,33 +117,47 @@ class TTSService {
 
     try {
       final elevenKey = dotenv.env['ELEVEN_API_KEY'];
+      final openaiKey = dotenv.env['OPENAI_API_KEY'];
 
-      if (elevenKey == null || elevenKey.isEmpty) {
-        debugPrint("[TTS] .env에 ELEVEN_API_KEY가 없어 OpenAI로 전환");
-        await _speakWithOpenAI(text);
+      // 1. API 키 확인
+      if ((elevenKey == null || elevenKey.isEmpty) &&
+          (openaiKey == null || openaiKey.isEmpty)) {
+        debugPrint("[TTS] API 키 누락: ElevenLabs / OpenAI 둘 다 없음");
         return;
       }
 
-      final ref = FirebaseDatabase.instance
-          .ref("preference/$userName/character_settings/voiceId");
+      // 2. Firebase에서 voiceId / fairyVoiceId 불러오기
+      final refPath = isFairyMode
+          ? "preference/$userName/character_settings/fairyVoiceId"
+          : "preference/$userName/character_settings/voiceId";
+
+      final ref = FirebaseDatabase.instance.ref(refPath);
       final snapshot = await ref.get();
       final voiceId = snapshot.value?.toString();
 
-      if (voiceId != null && voiceId.isNotEmpty) {
-        debugPrint("[TTS] 클로닝된 음성 사용 ($voiceId)");
-        await _speakWithElevenLabs(text, voiceId);
+      // 3. ElevenLabs 우선
+      if (elevenKey != null && elevenKey.isNotEmpty) {
+        if (voiceId != null && voiceId.isNotEmpty) {
+          debugPrint("[TTS] ElevenLabs ${isFairyMode ? '요정' : '캐릭터'} 음성 사용 ($voiceId)");
+          await _speakWithElevenLabs(text, voiceId);
+        } else {
+          debugPrint("[TTS] ${isFairyMode ? 'fairyVoiceId' : 'voiceId'} 없음 → OpenAI fallback");
+          await _speakWithOpenAI(text);
+        }
       } else {
-        debugPrint("[TTS] voiceId 없음 → 기본 OpenAI 음성 사용");
+        // 4. ElevenLabs 키 없으면 OpenAI 사용
+        debugPrint("[TTS] ElevenLabs 키 없음 → OpenAI 사용");
         await _speakWithOpenAI(text);
       }
     } catch (e) {
-      debugPrint("[TTS 예외] $e");
-      await _speakWithOpenAI(text); // 예외 발생 시 fallback
+      debugPrint("[TTS 예외] $e → OpenAI fallback");
+      await _speakWithOpenAI(text);
     } finally {
       _isProcessing = false;
       _isPlaying = false;
     }
   }
+
 
   Future<void> stop() async {
     try {

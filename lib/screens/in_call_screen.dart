@@ -85,7 +85,7 @@ class _InCallScreenState extends State<InCallScreen> {
       });
 
       final userName = UserInfo.name ?? "unknown";
-      await _ttsService.speak(message, userName);
+      await _ttsService.speak(message, userName, isFairyMode: false);
 
       _ttsService.onComplete = () {
         if (mounted) {
@@ -473,7 +473,11 @@ class _InCallScreenState extends State<InCallScreen> {
       final userName = UserInfo.name ?? "unknown";
 
       // 요정 인사 먼저 말하기
-      await _ttsService.speak("요정이 나타났어! 너를 도와주러 왔어.", userName);
+      await _ttsService.speak(
+        "요정이 나타났어! 너를 도와주러 왔어.",
+        userName,
+        isFairyMode: true,
+      );
 
       // TTS 완전히 끝난 뒤 0.5초 대기 (MediaCodec 안정화 시간)
       await Future.delayed(const Duration(milliseconds: 500));
@@ -585,10 +589,8 @@ class _InCallScreenState extends State<InCallScreen> {
                 height: 240,
                 child: Image.asset(
                   isFairyMode
-                      ? 'assets/characters/fairy.png' // 요정모드일 때 이미지
-                      : isSpeaking
-                      ? 'assets/characters/character_talking.gif'  // TODO: 동적 렌더링 수정
-                      : 'assets/characters/character.png',
+                      ? 'assets/characters/fairy.gif' // 요정 모드일 때 이미지
+                      : 'assets/characters/character_talking.gif', // 항상 GIF 렌더링 (TODO: 동적 수정)
                   fit: BoxFit.contain,
                 ),
               ),
