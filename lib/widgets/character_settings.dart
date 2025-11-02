@@ -274,7 +274,7 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Text(
-                      '현재 음성 캐릭터 이름: ${settings.characterName.isNotEmpty ? settings.characterName : "사용자 음성"}',
+                      '현재 음성: ${settings.characterName.isNotEmpty ? settings.characterName : "사용자 음성"}',
                       style: const TextStyle(
                         color: Colors.black87,
                         fontWeight: FontWeight.w600,
@@ -710,25 +710,83 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
   Future<String?> _showSpeakingStyleDialog(BuildContext context) async {
     return showDialog<String>(
       context: context,
-      builder: (_) => SimpleDialog(
-        title: const Text('대화 스타일 선택'),
-        children: [
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(context, "encouraging"),
-            child: const Text("격려형 (예: 잘했어요!, 좋아요!)"),
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFFFFF7E9),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          '대화 스타일 선택',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF5D4037),
           ),
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(context, "questioning"),
-            child: const Text("질문형 (예: 그 다음엔 어떻게 됐을까?)"),
-          ),
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(context, "reflective"),
-            child: const Text("반응형 (예: 음~ 그렇구나!)"),
+        ),
+        contentPadding: EdgeInsets.zero,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _styleOption(
+              context,
+              "encouraging",
+              "격려형 (예: 잘했어요!, 좋아요!)",
+              const Icon(Icons.emoji_emotions, color: Colors.orangeAccent),
+            ),
+            const Divider(height: 1),
+            _styleOption(
+              context,
+              "questioning",
+              "질문형 (예: 그 다음엔 어떻게 됐을까?)",
+              const Icon(Icons.help_outline, color: Colors.blueAccent),
+            ),
+            const Divider(height: 1),
+            _styleOption(
+              context,
+              "reflective",
+              "반응형 (예: 음~ 그렇구나!)",
+              const Icon(Icons.chat_bubble_outline, color: Colors.green),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('닫기'),
           ),
         ],
       ),
     );
   }
+
+  /// 대화 스타일 버튼 위젯
+  Widget _styleOption(
+      BuildContext context,
+      String value,
+      String label,
+      Icon icon,
+      ) {
+    return InkWell(
+      onTap: () => Navigator.pop(context, value),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        child: Row(
+          children: [
+            icon,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.black87,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
 
   /// 숫자 입력 다이얼로그
   Future<int?> _showNumberInputDialog(
