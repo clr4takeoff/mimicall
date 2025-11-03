@@ -60,6 +60,6 @@ Parents can set conversation topics, target sentences, and character voices, whi
 
 | API | Purpose |
 |------|----------|
-| **OpenAI** | GPT-4o for dialogue, GPT-4o-mini-stt for STT, DALL·E 3 for visual summaries |
+| **OpenAI** | GPT-4o for dialogue, Whisper for STT, DALL·E 3 for visual summaries |
 | **ElevenLabs** | Voice cloning and text-to-speech |
 | **GoEnhance** | Image-to-video animation for character motion |
