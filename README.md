@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 # Mimicall ☎️
+=======
+# Mimicall
+>>>>>>> a7d2fe3 (style: adjust font size on name landing screen)
 
 **Mimicall** is an AI-assisted language therapy prototype that helps children practice speech by talking with AI-generated characters.  
 Parents can set conversation topics, target sentences, and character voices, while the system generates real-time interactive conversations and reports.
@@ -28,7 +32,12 @@ Parents can set conversation topics, target sentences, and character voices, whi
 ---
 
 ## System Architecture
+<<<<<<< HEAD
 <img width="1000" height="600" alt="도식" src="https://github.com/user-attachments/assets/60829167-cae5-48fa-98ec-8e2ac61c2ba4" />
+=======
+
+![System Architecture](image_placeholder.png)  
+>>>>>>> a7d2fe3 (style: adjust font size on name landing screen)
 *Figure 1. Mimicall service architecture*
 
 ---

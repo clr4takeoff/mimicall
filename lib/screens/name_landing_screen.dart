@@ -80,7 +80,7 @@ class _NameLandingScreenState extends State<NameLandingScreen> {
                   '이름을 입력해주세요',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 28,
+                    fontSize: 25,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF5D4037),
                   ),
@@ -90,7 +90,7 @@ class _NameLandingScreenState extends State<NameLandingScreen> {
                   '입력하신 이름은 캐릭터가 아이를 부를 때 사용돼요.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 15,
+                    fontSize: 14  ,
                     color: Colors.brown,
                   ),
                 ),
