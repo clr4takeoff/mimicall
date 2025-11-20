@@ -550,7 +550,18 @@ class _InCallScreenState extends State<InCallScreen> {
           alignment: Alignment.center,
           children: [
             Positioned(
-              top: 80,
+              top: 60,
+              child: SizedBox(
+                width: 120,
+                height: 50,
+                child: Image.asset(
+                  'assets/temp/traffic_light.png',
+                  fit: BoxFit.fill,
+                ),
+              ),
+            ),
+            Positioned(
+              top: 120,
               child: Column(
                 children: [
                   Text(
@@ -597,7 +608,7 @@ class _InCallScreenState extends State<InCallScreen> {
             ),
 
             Positioned(
-              top: MediaQuery.of(context).size.height * 0.25,
+              top: MediaQuery.of(context).size.height * 0.28,
               child: TopBubble(text: dummySpeech, isFairyMode: isFairyMode,),
             ),
             Positioned(
@@ -691,6 +702,17 @@ class _InCallScreenState extends State<InCallScreen> {
                     ),
                   ),
                 ],
+              ),
+            ),
+            Positioned(
+              bottom: -0,
+              child: SizedBox(
+                width: 360,
+                height: 60,
+                child: Image.asset(
+                  'assets/temp/progress_car.png',
+                  fit: BoxFit.fill,
+                ),
               ),
             ),
           ],

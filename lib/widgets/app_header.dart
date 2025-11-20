@@ -37,7 +37,7 @@ class AppHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '안녕, $userName!',
+                '반가워요, $userName 보호자님!',
                 style: const TextStyle(
                   fontSize: 26,
                   fontWeight: FontWeight.bold,
@@ -46,7 +46,7 @@ class AppHeader extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               const Text(
-                '오늘도 즐거운 하루 되길 :)',
+                '오늘도 즐거운 대화를 시작해볼까요? :)',
                 style: TextStyle(
                   fontSize: 16,
                   color: Color(0xFF8D6E63),
