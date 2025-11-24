@@ -13,8 +13,6 @@ class ConversationService {
   String? contextText;
   List<String> targetSpeechList = [];
 
-  bool isFairyMode = false;
-
   ConversationService({
     required this.stt,
     required this.tts,
@@ -61,10 +59,7 @@ class ConversationService {
     required String username,
     required String characterName,
   }) async {
-    if (isFairyMode) {
-      return "현재 요정 모드야. 캐릭터는 대화하지 않고 요정이 아이 발화를 돕고 있어.";
-    }
-
+    // 2단계 (도움 요청) 로직
     if (conversationStage == 2) {
       if (contextText == null) {
         await loadCharacterContext(username);
@@ -78,6 +73,7 @@ class ConversationService {
       """;
     }
 
+    // 그 외 단계 로직
     switch (conversationStage) {
       case 1:
         return "지금은 1단계야. 아이와 친해지고 편안하게 대화해.";
@@ -95,10 +91,6 @@ class ConversationService {
     };
 
     tts.onComplete = () async {
-      if (isFairyMode) {
-        debugPrint("[Conversation] Fairy mode active → STT 자동 시작 생략");
-        return;
-      }
       debugPrint("[Conversation] TTS 완료 → STT 재시작 대기");
     };
   }
@@ -107,23 +99,13 @@ class ConversationService {
     await stt.initialize();
   }
 
-  void enableFairyMode() {
-    isFairyMode = true;
-    debugPrint("[Conversation] 요정 모드 활성화");
-  }
-
-  void disableFairyMode() {
-    isFairyMode = false;
-    debugPrint("[Conversation] 요정 모드 비활성화");
-  }
-
   void _updateConversationStage() {
     if (turnCount < 3) {
       conversationStage = 1;
     } else if (turnCount < 6) {
       conversationStage = 2;
     } else {
-      conversationStage = 2;
+      conversationStage = 2; // 턴이 길어져도 일단 2단계 유지 (목표 발화 해야 3단계로)
     }
   }
 
@@ -132,14 +114,10 @@ class ConversationService {
 
     turnCount++;
 
-    if (isFairyMode) {
-      debugPrint("[Conversation] 요정 모드 중 → 단계 변경 생략");
-      return;
-    }
-
     final prevStage = conversationStage;
     _updateConversationStage();
 
+    // 목표 발화 체크 (2단계일 때만 체크하여 3단계로 이동)
     final matched = _isSimilarToTargetSpeech(userText);
     if (conversationStage == 2 && matched) {
       conversationStage = 3;
@@ -155,7 +133,7 @@ class ConversationService {
 
   bool _isSimilarToTargetSpeech(String userText) {
     if (targetSpeechList.isEmpty) {
-      debugPrint("[Conversation] targetSpeechList 비어 있음 (Firebase 로드 실패 가능)");
+      // 로드 실패했거나 데이터가 없으면 패스
       return false;
     }
 
@@ -164,12 +142,14 @@ class ConversationService {
     for (final target in targetSpeechList) {
       final normalizedTarget = target.replaceAll(RegExp(r'[\s,.!?]'), '').toLowerCase();
 
+      // 1. 단순 포함 여부 확인
       if (normalizedUser.contains(normalizedTarget) ||
           normalizedTarget.contains(normalizedUser)) {
         debugPrint("[Conversation] 직접 포함 매칭 감지: $target");
         return true;
       }
 
+      // 2. 레벤슈타인 거리 유사도 확인
       final distance = _levenshteinDistance(normalizedUser, normalizedTarget);
       final maxLen = normalizedUser.length > normalizedTarget.length
           ? normalizedUser.length
@@ -182,7 +162,6 @@ class ConversationService {
       }
     }
 
-    debugPrint("[Conversation] 목표 문장 불일치: $userText");
     return false;
   }
 
@@ -262,11 +241,5 @@ class ConversationService {
     } catch (e) {
       debugPrint("[Firebase] 저장 오류: $e");
     }
-  }
-
-  void resetContext() {
-    debugPrint("[Conversation] 요정 모드 종료 후 컨텍스트 초기화");
-    isFairyMode = false;
-    _setupTtsListeners();
   }
 }

@@ -7,7 +7,6 @@ import '../services/report_service.dart';
 import '../services/conversation_service.dart';
 import '../utils/user_info.dart';
 import '../models/character_settings_model.dart';
-import '../services/fairy_service.dart';
 import 'package:firebase_database/firebase_database.dart';
 import '../widgets/chat_bubble.dart';
 
@@ -25,7 +24,6 @@ class _InCallScreenState extends State<InCallScreen> {
   bool isSpeaking = false;
   bool isFairyMode = false;
   bool _isEndingCall = false;
-  bool _isFairyButtonEnabled = false;
   bool _isGreeting = false;
   bool _isListening = false; // 사용자가 현재 말하고 있는지 여부. 버튼 조작
   bool _isThinking = false; // GPT 처리중
@@ -40,12 +38,10 @@ class _InCallScreenState extends State<InCallScreen> {
 
   late STTService _sttService;
   late TTSService _ttsService;
-  late FairyService _fairyService;
   final GPTResponse gpt = GPTResponse();
 
   late ConversationService _conversation;
 
-  @override
   @override
   void initState() {
     super.initState();
@@ -54,48 +50,6 @@ class _InCallScreenState extends State<InCallScreen> {
     _sttService = STTService(callId: "test_call_001");
     _ttsService = TTSService();
     _conversation = ConversationService(stt: _sttService, tts: _ttsService);
-    _fairyService = FairyService(tts: _ttsService, stt: _sttService, gpt: gpt);
-
-    // FairyService 콜백 등록 (가장 먼저 설정)
-    _fairyService.onReadyForMic = () {
-      if (!mounted) return;
-      setState(() {
-        _isThinking = false;   // 생각 중 아님
-        _isGreeting = false;   // 인사 중 아님
-        _isListening = false;  // 아직 녹음 시작 전 (버튼은 눌러질 수 있게)
-      });
-      debugPrint("[InCallScreen] Fairy → 마이크 사용 준비됨 (버튼 활성화)");
-    };
-
-    _fairyService.onFairyComplete = () async {
-      if (!mounted) return;
-      await _fairyService.stopSession();
-      _conversation.disableFairyMode();
-      await _ttsService.stop();
-      gpt.resetCharacterContext();
-      _conversation.resetContext();
-
-      const message = "요정이 쉬러 갔어~ 이제 다시 나랑 이야기하자 😊";
-      setState(() {
-        isFairyMode = false;
-        dummySpeech = message;
-        _isThinking = false;
-        _isGreeting = false;
-        _isListening = false;
-      });
-
-      final userName = UserInfo.name ?? "unknown";
-      await _ttsService.speak(message, userName, isFairyMode: false);
-
-      _ttsService.onComplete = () {
-        if (mounted) {
-          setState(() {
-            _isListening = false;
-          });
-        }
-        debugPrint("[InCallScreen] 캐릭터모드 복귀 — TTS 완료 후 마이크 활성화 가능");
-      };
-    };
 
     // TTS 상태 스트림 감시 (음성 재생 중/완료 등)
     _ttsService.playerStateStream.listen((state) {
@@ -108,7 +62,7 @@ class _InCallScreenState extends State<InCallScreen> {
       debugPrint("[InCallScreen] TTS 완료 — 마이크 다시 활성화 가능");
     });
 
-    // TTS 시작 / 완료 이벤트 설정
+    // TTS 시작 이벤트 설정
     _ttsService.onStart = () {
       if (mounted) {
         setState(() {
@@ -118,34 +72,14 @@ class _InCallScreenState extends State<InCallScreen> {
       debugPrint("[InCallScreen] TTS 시작 — 마이크 버튼 비활성화");
     };
 
+    // TTS 완료 이벤트 설정
     _ttsService.onComplete = () {
-      if (isFairyMode) {
-        debugPrint("[InCallScreen] FairyMode active → 마이크 상태 유지 (비활성)");
-        return;
-      }
-
       if (mounted) {
         setState(() {
           _isListening = false; // 다시 마이크 활성화 가능
         });
       }
       debugPrint("[InCallScreen] TTS 완료 — 마이크 다시 활성화 가능");
-    };
-
-    // 요정 모드 말풍선 업데이트
-    _fairyService.onFairySpeak = (line) {
-      if (!mounted) return;
-      setState(() {
-        dummySpeech = line;
-        _isListening = false;
-      });
-    };
-
-    _fairyService.onChildSpeak = (line) {
-      if (!mounted) return;
-      setState(() {
-        childSpeech = line;
-      });
     };
 
     // 캐릭터 설정 및 STT 초기화 후 인사 발화
@@ -216,7 +150,6 @@ class _InCallScreenState extends State<InCallScreen> {
     }
   }
 
-
   Future<void> _initializeSTT() async {
     await _sttService.initialize();
 
@@ -232,15 +165,7 @@ class _InCallScreenState extends State<InCallScreen> {
 
       final now = DateTime.now();
 
-      // 요정모드면 FairyService로 넘기고 나머지 로직 스킵
-      if (isFairyMode) {
-        debugPrint("[InCallScreen] 요정모드 음성 인식 결과 감지 → FairyService.handleUserText() 호출");
-        final userName = UserInfo.name ?? "unknown";
-        await _fairyService.handleUserText(text, _characterName, userName);
-        return;
-      }
-
-      // ===== 캐릭터 일반 대화 모드 =====
+      // 발화 시간 및 반응 속도 계산
       int? speechDurationMs;
       if (_speechStartTime != null) {
         speechDurationMs = now.difference(_speechStartTime!).inMilliseconds;
@@ -257,12 +182,7 @@ class _InCallScreenState extends State<InCallScreen> {
       // 아이 발화 텍스트 표시 + GPT 준비 상태 진입
       setState(() {
         childSpeech = text;
-        final currentStage = _conversation.conversationStage;
-        if (currentStage >= 2 && !_isFairyButtonEnabled) {
-          _isFairyButtonEnabled = true;
-        }
         isSpeaking = true;
-
         dummySpeech = "음... 생각 중이야";
         _isThinking = true; // GPT 생각 중 → 마이크 회색 유지
       });
@@ -323,15 +243,12 @@ class _InCallScreenState extends State<InCallScreen> {
     };
   }
 
-
-
   @override
   void dispose() {
     debugPrint("[InCallScreen] 세션 종료 중...");
     _sttService.onResult = null;
     _sttService.dispose();
     _ttsService.dispose();
-    _fairyService.stopSession();
     super.dispose();
     debugPrint("[InCallScreen] 세션 종료 완료");
   }
@@ -454,76 +371,6 @@ class _InCallScreenState extends State<InCallScreen> {
     }
   }
 
-  void _toggleFairyMode() async {
-    if (!isFairyMode) {
-      // 모든 음성 중단 (캐릭터 말 완전히 멈춤)
-      await _ttsService.stop();
-      await _sttService.stopListening(tempStop: true);
-
-      // UI 먼저 변경 (요정 등장)
-      setState(() {
-        isFairyMode = true;
-        dummySpeech = "✨요정이 나타났어! 너를 도와주러 왔어~✨";
-      });
-
-      // 대화 로직 전환
-      _conversation.enableFairyMode();
-
-      // 요정 첫 인사 (겹치지 않게 순차 실행)
-      final userName = UserInfo.name ?? "unknown";
-
-      // 요정 인사 먼저 말하기
-      await _ttsService.speak(
-        "요정이 나타났어! 너를 도와주러 왔어.",
-        userName,
-        isFairyMode: true,
-      );
-
-      // TTS 완전히 끝난 뒤 0.5초 대기 (MediaCodec 안정화 시간)
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      // 이제 요정 모드 대화 시작
-      await _fairyService.startGuidedSession(
-        username: userName,
-        characterName: _characterSettings?.characterName ?? "캐릭터",
-      );
-
-
-      // 요정 Flow 시작
-      await _fairyService.startGuidedSession(
-        username: userName,
-        characterName: _characterSettings?.characterName ?? "캐릭터",
-      );
-
-    } else {
-      // 요정모드 종료
-      await _fairyService.stopSession();
-      _conversation.disableFairyMode();
-      await _ttsService.stop();
-      gpt.resetCharacterContext();
-      _conversation.resetContext();
-
-      const message = "요정이 쉬러 갔어~ 이제 다시 나랑 이야기하자 😊";
-      setState(() {
-        isFairyMode = false;
-        dummySpeech = message;
-      });
-
-      final userName = UserInfo.name ?? "unknown";
-      await _ttsService.speak(message, userName);
-
-      // 요정모드 콜백 해제 후 TTS 이벤트 원복
-      _ttsService.onComplete = () {
-        if (mounted) {
-          setState(() {
-            _isListening = false;
-          });
-        }
-        debugPrint("[InCallScreen] 캐릭터모드 복귀 — TTS 완료 후 마이크 활성화 가능");
-      };
-    }
-  }
-
 
   @override
   Widget build(BuildContext context) {
@@ -599,9 +446,7 @@ class _InCallScreenState extends State<InCallScreen> {
                 duration: const Duration(milliseconds: 300),
                 height: 240,
                 child: Image.asset(
-                  isFairyMode
-                      ? 'assets/characters/fairy.gif' // 요정 모드일 때 이미지
-                      : 'assets/characters/character_talking.gif', // 항상 GIF 렌더링 (TODO: 동적 수정)
+                  'assets/characters/character_talking.gif', // 항상 GIF 렌더링 (TODO: 동적 수정)
                   fit: BoxFit.contain,
                 ),
               ),
@@ -612,7 +457,7 @@ class _InCallScreenState extends State<InCallScreen> {
               child: TopBubble(text: dummySpeech, isFairyMode: isFairyMode,),
             ),
             Positioned(
-              bottom: 160,
+              bottom: 150,
               child: Container(
                   width: MediaQuery.of(context).size.width * 0.8,
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
@@ -655,24 +500,23 @@ class _InCallScreenState extends State<InCallScreen> {
             ),
 
             Positioned(
-              bottom: 80,
+              bottom: 65,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   FloatingActionButton(
-                    heroTag: 'fairy',
-                    backgroundColor: !_isFairyButtonEnabled
-                        ? Colors.grey
-                        : (isFairyMode
-                        ? const Color(0xFFB39DDB)
-                        : const Color(0xFF91D8F7)),
-                    onPressed: _isFairyButtonEnabled ? _toggleFairyMode : null,
-                    child: Icon(
-                      isFairyMode ? Icons.undo : Icons.auto_awesome,
-                      size: 32,
+                    heroTag: 'next',
+                    backgroundColor: const Color(0xFF7CCAF3),
+                    onPressed: () {
+                      // TODO: 다음 화면으로 넘어가는 로직 작성
+                    },
+                    child: const Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 36,
                       color: Colors.white,
                     ),
                   ),
+
                   const SizedBox(width: 40),
 
                   FloatingActionButton(
@@ -702,17 +546,6 @@ class _InCallScreenState extends State<InCallScreen> {
                     ),
                   ),
                 ],
-              ),
-            ),
-            Positioned(
-              bottom: -0,
-              child: SizedBox(
-                width: 360,
-                height: 60,
-                child: Image.asset(
-                  'assets/temp/progress_car.png',
-                  fit: BoxFit.fill,
-                ),
               ),
             ),
           ],
