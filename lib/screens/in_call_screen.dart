@@ -349,6 +349,61 @@ class _InCallScreenState extends State<InCallScreen> {
     }
   }
 
+  // 3단계로 강제 전환
+  Future<void> _forceNextStage() async {
+    if (_isThinking || _isGreeting || _ttsService.isPlaying) return;
+
+    debugPrint("[InCallScreen] Next 버튼 클릭 → 3단계(마무리) 전환 시작");
+
+    await _sttService.stopListening();
+    await _ttsService.stop();
+
+    setState(() {
+      _isListening = false;
+      _isThinking = true;
+      dummySpeech = "마무리하는 중...";
+    });
+
+    // 서비스의 상태를 먼저 3단계로 강제 변경
+    // 턴수도 강제로 늘려둬야 나중에 서비스 로직에 의해 단계가 롤백되지 않음
+    _conversation.conversationStage = 3;
+    _conversation.turnCount = 20;
+
+    try {
+      final userName = UserInfo.name ?? "친구";
+
+      final stageInstruction = await _conversation.getStageInstruction(
+        username: userName,
+        characterName: _characterName,
+      );
+
+      final transitionReply = await gpt.sendMessageToLLM(
+        "이제 헤어질 시간이야. 작별 인사를 해줘.",
+        stageInstruction: stageInstruction, // 여기에 3단계 프롬프트가 들어감
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        dummySpeech = transitionReply;
+        _isThinking = false;
+      });
+
+      await _conversation.saveMessage(
+        dbPath: widget.dbPath,
+        role: "z_assistant",
+        text: transitionReply,
+      );
+
+      await _ttsService.speak(transitionReply, userName);
+
+    } catch (e) {
+      debugPrint("단계 전환 중 오류: $e");
+      if (mounted) {
+        setState(() => _isThinking = false);
+      }
+    }
+  }
   // 말하기 버튼: STT 수동 제어
   Future<void> _toggleRecording() async {
     if (_ttsService.isPlaying || _isGreeting) return;
@@ -503,9 +558,7 @@ class _InCallScreenState extends State<InCallScreen> {
                   FloatingActionButton(
                     heroTag: 'next',
                     backgroundColor: const Color(0xFF7CCAF3),
-                    onPressed: () {
-                      // TODO: 다음 화면으로 넘어가는 로직 작성
-                    },
+                    onPressed: _forceNextStage,
                     child: const Icon(
                       Icons.arrow_forward_rounded,
                       size: 36,
