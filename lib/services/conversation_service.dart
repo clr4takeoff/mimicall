@@ -11,7 +11,6 @@ class ConversationService {
   int turnCount = 0;
   int conversationStage = 1; // 1=라포, 2=도움요청, 3=마무리
   String? contextText;
-  List<String> targetSpeechList = [];
 
   ConversationService({
     required this.stt,
@@ -35,26 +34,6 @@ class ConversationService {
     }
   }
 
-  Future<void> loadTargetSpeech(String username) async {
-    try {
-      final ref = _db.child('preference/$username/character_settings/targetSpeech');
-      final snapshot = await ref.get();
-      if (snapshot.exists) {
-        final raw = snapshot.value.toString();
-        targetSpeechList = raw
-            .split(',')
-            .map((e) => e.trim())
-            .where((e) => e.isNotEmpty)
-            .toList();
-        debugPrint("[Conversation] targetSpeech 로드 완료: $targetSpeechList");
-      } else {
-        debugPrint("[Conversation] targetSpeech 없음");
-      }
-    } catch (e) {
-      debugPrint("[Conversation] targetSpeech 로드 실패: $e");
-    }
-  }
-
   Future<String> getStageInstruction({
     required String username,
     required String characterName,
@@ -68,7 +47,6 @@ class ConversationService {
       지금은 2단계야. 너는 캐릭터 $characterName이고, $username과 대화 중이야.
       너는 '${contextText ?? "작은 문제가 생긴 상황"}' 상황을 겪고 있어 곤란한 상태야.
       이 상황을 설명하면서 도움을 요청해.
-      정답은 말하지 말고, 힌트도 주지 마.
       $username이 너를 도와주는 영웅처럼 느끼게 해줘.
       """;
     }
@@ -78,7 +56,7 @@ class ConversationService {
       case 1:
         return "지금은 1단계야. 아이와 친해지고 편안하게 대화해.";
       case 3:
-        return "지금은 3단계야. 아이가 도와줘서 문제가 해결됐어. 고맙다고 말하며 대화를 마무리해.";
+        return "지금은 3단계야. 아이가 너의 문제를 해결해줬어. 이제 고맙다고 말하며 자연스럽게 대화를 마무리해.";
       default:
         return "항상 따뜻하고 친근하게 대화해.";
     }
@@ -99,13 +77,15 @@ class ConversationService {
     await stt.initialize();
   }
 
+  // 턴 수에 따라 단계를 변경하는 로직
   void _updateConversationStage() {
+    // 예시: 1~2턴(1단계), 3~5턴(2단계), 10턴 이상(3단계)
     if (turnCount < 3) {
       conversationStage = 1;
-    } else if (turnCount < 6) {
+    } else if (turnCount < 10) {
       conversationStage = 2;
     } else {
-      conversationStage = 2; // 턴이 길어져도 일단 2단계 유지 (목표 발화 해야 3단계로)
+      conversationStage = 3; // TODO: 2단계 로직 구성 후 next버튼을 통해 도달할 수 있게 수정
     }
   }
 
@@ -115,78 +95,15 @@ class ConversationService {
     turnCount++;
 
     final prevStage = conversationStage;
+
+    // 복잡한 검사 없이 턴 수만 확인하여 단계 업데이트로 구현
     _updateConversationStage();
 
-    // 목표 발화 체크 (2단계일 때만 체크하여 3단계로 이동)
-    final matched = _isSimilarToTargetSpeech(userText);
-    if (conversationStage == 2 && matched) {
-      conversationStage = 3;
-      debugPrint("[Conversation] 목표 발화 유사 감지 → 3단계 전환");
-    } else {
-      debugPrint("[Conversation] 발화 감지 | 턴: $turnCount | 단계: ${_stageName(conversationStage)}");
-    }
+    debugPrint("[Conversation] 발화 감지 | 턴: $turnCount | 단계: ${_stageName(conversationStage)}");
 
     if (conversationStage != prevStage) {
       debugPrint("[Conversation] 단계 전환 → ${_stageName(conversationStage)}");
     }
-  }
-
-  bool _isSimilarToTargetSpeech(String userText) {
-    if (targetSpeechList.isEmpty) {
-      // 로드 실패했거나 데이터가 없으면 패스
-      return false;
-    }
-
-    final normalizedUser = userText.replaceAll(RegExp(r'[\s,.!?]'), '').toLowerCase();
-
-    for (final target in targetSpeechList) {
-      final normalizedTarget = target.replaceAll(RegExp(r'[\s,.!?]'), '').toLowerCase();
-
-      // 1. 단순 포함 여부 확인
-      if (normalizedUser.contains(normalizedTarget) ||
-          normalizedTarget.contains(normalizedUser)) {
-        debugPrint("[Conversation] 직접 포함 매칭 감지: $target");
-        return true;
-      }
-
-      // 2. 레벤슈타인 거리 유사도 확인
-      final distance = _levenshteinDistance(normalizedUser, normalizedTarget);
-      final maxLen = normalizedUser.length > normalizedTarget.length
-          ? normalizedUser.length
-          : normalizedTarget.length;
-      final similarity = 1 - (distance / maxLen);
-
-      if (similarity > 0.6) {
-        debugPrint("[Conversation] 유사도 매칭 감지 ($similarity): $target");
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  int _levenshteinDistance(String a, String b) {
-    final m = a.length;
-    final n = b.length;
-    if (m == 0) return n;
-    if (n == 0) return m;
-
-    final dp = List.generate(m + 1, (_) => List<int>.filled(n + 1, 0));
-    for (var i = 0; i <= m; i++) dp[i][0] = i;
-    for (var j = 0; j <= n; j++) dp[0][j] = j;
-
-    for (var i = 1; i <= m; i++) {
-      for (var j = 1; j <= n; j++) {
-        final cost = a[i - 1] == b[j - 1] ? 0 : 1;
-        dp[i][j] = [
-          dp[i - 1][j] + 1,
-          dp[i][j - 1] + 1,
-          dp[i - 1][j - 1] + cost,
-        ].reduce((a, b) => a < b ? a : b);
-      }
-    }
-
-    return dp[m][n];
   }
 
   String _stageName(int stage) {

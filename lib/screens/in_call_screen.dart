@@ -140,10 +140,6 @@ class _InCallScreenState extends State<InCallScreen> {
           style: settings.speakingStyle,
           targetSpeechCount: settings.targetSpeechCount,
         );
-
-        // 목표 발화 불러오기 (이 부분 추가!)
-        await _conversation.loadTargetSpeech(childName);
-        debugPrint("[InCallScreen] Target speech 불러오기 완료: ${_conversation.targetSpeechList}");
       }
     } catch (e) {
       debugPrint("캐릭터 설정 불러오기 실패: $e");
