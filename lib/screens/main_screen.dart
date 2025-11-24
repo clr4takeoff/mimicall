@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'incoming_call_screen.dart';
+import 'traffic_guide_screen.dart';
 import 'report_list_screen.dart';
 import '../utils/user_info.dart';
 import '../widgets/menu_button.dart';
 import '../widgets/app_header.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class MainScreen extends StatelessWidget {
   final String? userName;
@@ -45,6 +47,20 @@ class MainScreen extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
+                        MenuButton(
+                          color: const Color(0xFFFDBA28),
+                          icon: FontAwesomeIcons.trafficLight,
+                          label: '신호등 가이드 확인하기',
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const TrafficLightGuideScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 24),
                         MenuButton(
                           color: const Color(0xFFFF7043),
                           icon: Icons.videocam_rounded,
