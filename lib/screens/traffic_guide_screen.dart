@@ -13,6 +13,7 @@ class TrafficLightGuideScreen extends StatelessWidget {
     // 2. 한글 받침 확인 로직 (조사 처리를 위해)
     final lastChar = userName.characters.last;
     final codeUnit = lastChar.codeUnitAt(0);
+
     // 한글 유니코드 범위 내에 있고, (코드 - 0xAC00) % 28 != 0 이면 받침 있음
     final hasBatchim = (codeUnit >= 0xAC00 && codeUnit <= 0xD7A3)
         ? (codeUnit - 0xAC00) % 28 != 0
