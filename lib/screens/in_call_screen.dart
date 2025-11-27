@@ -10,7 +10,6 @@ import '../models/character_settings_model.dart';
 import 'package:firebase_database/firebase_database.dart';
 import '../widgets/chat_bubble.dart';
 
-
 class InCallScreen extends StatefulWidget {
   final String dbPath;
 
@@ -27,6 +26,7 @@ class _InCallScreenState extends State<InCallScreen> {
   bool _isGreeting = false;
   bool _isListening = false; // 사용자가 현재 말하고 있는지 여부. 버튼 조작
   bool _isThinking = false; // GPT 처리중
+  String _trafficLightAsset = 'assets/temp/traffic_light.png';
 
 
   String dummySpeech = "";
@@ -413,6 +413,15 @@ class _InCallScreenState extends State<InCallScreen> {
       await _sttService.stopListening();
       debugPrint("[InCallScreen] 사용자가 말하기 종료");
     } else {
+      // 🔥 2단계 + GPT 발화 직후 + 아이가 말하려는 순간 → 노란불 켜기
+      if (_conversation.conversationStage == 2 && !_ttsService.isPlaying && !_isThinking && !_isGreeting) {
+        setState(() {
+          _trafficLightAsset = 'assets/temp/yellow_traffic_light.png';
+        });
+
+        debugPrint("[TrafficLight] 2단계 발화 대기 → 노란 불 ON");
+      }
+
       // 녹음 시작
       await _ttsService.stop(); // 혹시 캐릭터가 말 중이면 중단
       await _sttService.startListening();
@@ -453,7 +462,7 @@ class _InCallScreenState extends State<InCallScreen> {
                 width: 120,
                 height: 50,
                 child: Image.asset(
-                  'assets/temp/traffic_light.png',
+                  _trafficLightAsset,
                   fit: BoxFit.fill,
                 ),
               ),

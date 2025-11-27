@@ -8,7 +8,7 @@ import 'tts_service.dart';
 
 class STTService {
   final String callId;
-  final Record _recorder = Record();
+  final AudioRecorder _recorder = AudioRecorder();
   final TTSService? ttsService;
   bool _isRecording = false;
   bool _isProcessing = false;
@@ -39,11 +39,13 @@ class STTService {
     debugPrint("[STT] 녹음 시작: $filePath");
 
     await _recorder.start(
+      const RecordConfig(
+        encoder: AudioEncoder.aacLc,
+        sampleRate: 16000,
+        bitRate: 96000,
+        numChannels: 1,
+      ),
       path: filePath,
-      encoder: AudioEncoder.aacLc,
-      bitRate: 96000,
-      samplingRate: 16000,
-      numChannels: 1,
     );
 
     // 녹음 중일 때 음성 감지 콜백
