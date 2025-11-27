@@ -27,6 +27,7 @@ class _InCallScreenState extends State<InCallScreen> {
   bool _isListening = false; // 사용자가 현재 말하고 있는지 여부. 버튼 조작
   bool _isThinking = false; // GPT 처리중
   String _trafficLightAsset = 'assets/temp/traffic_light.png';
+  int stage2InternalTurn = 0;
 
 
   String dummySpeech = "";
@@ -159,6 +160,9 @@ class _InCallScreenState extends State<InCallScreen> {
     _sttService.onResult = (text) async {
       if (_isEndingCall || !mounted || text.isEmpty) return;
 
+      // 👉 Stage 바뀌기 전 단계(이전 단계) 기억
+      final prevStage = _conversation.conversationStage;
+
       final now = DateTime.now();
 
       // 발화 시간 및 반응 속도 계산
@@ -175,42 +179,81 @@ class _InCallScreenState extends State<InCallScreen> {
         debugPrint("[ResponseDelay] 아이 반응 시간: ${responseDelayMs}ms");
       }
 
-      // 아이 발화 텍스트 표시 + GPT 준비 상태 진입
+      // 아이 발화 텍스트 표시
       setState(() {
         childSpeech = text;
         isSpeaking = true;
-        dummySpeech = "음... 생각 중이야";
-        _isThinking = true; // GPT 생각 중 → 마이크 회색 유지
       });
 
+      // 👉 여기서 turnCount / conversationStage 업데이트
       _conversation.registerUserSpeech(text);
+      final currentStage = _conversation.conversationStage;
+
+      // "방금 막 Stage2로 진입했는지" 여부
+      final bool justEnteredStage2 =
+      (prevStage != 2 && currentStage == 2);
+
+      // GPT가 실제로 말했는지 여부
+      bool didAssistantSpeak = false;
+      String reply = "";
 
       final userName = UserInfo.name ?? "unknown";
-      final stageInstruction = await _conversation.getStageInstruction(
-        username: userName,
-        characterName: _characterName,
-      );
 
-      // GPT 응답 생성
-      final reply = await gpt.sendMessageToLLM(
-        text,
-        stageInstruction: stageInstruction,
-      );
+      // ================================
+      // 🌟 Stage2 로직
+      // ================================
+      if (currentStage == 2 && !justEnteredStage2) {
+        // 👉 이미 Stage2인 상태에서 아이가 또 말한 경우
+        //    → 부모 투명 버튼 입력을 기다려야 하므로 GPT는 조용히 있음.
+        debugPrint("[Stage2] 아이 발화 → GPT 발화 잠시 중지, 부모 판단 대기 모드");
 
-      if (_isEndingCall || reply.isEmpty) return;
-
-      // GPT 응답 도착 시 — 말풍선 업데이트만 하고, 버튼은 계속 회색 유지
-      if (mounted) {
         setState(() {
-          dummySpeech = reply; // 말풍선만 변경
-          // _isThinking 유지 (아직 TTS 시작 안 됨)
+          _isThinking = false; // 마이크/버튼 다시 활성화
+          // dummySpeech 는 이전 캐릭터 말풍선 그대로 유지
+          // 노란불은 녹음 시작 시에 이미 켜졌다고 가정
         });
+
+        // 이 경우에는 reply 없이, user 메시지만 로그에 남기고 종료
+      } else {
+        // ================================
+        // 🌟 Stage1 이거나
+        // 🌟 "방금 막" Stage2로 진입한 첫 턴(도움요청 질문)인 경우
+        //     → GPT가 정상적으로 발화해야 함
+        // ================================
+        setState(() {
+          dummySpeech = "음... 생각 중이야";
+          _isThinking = true;
+        });
+
+        final stageInstruction = await _conversation.getStageInstruction(
+          username: userName,
+          characterName: _characterName,
+        );
+
+        // GPT 응답 생성
+        reply = await gpt.sendMessageToLLM(
+          text,
+          stageInstruction: stageInstruction,
+        );
+
+        if (_isEndingCall || reply.isEmpty) {
+          setState(() => _isThinking = false);
+          return;
+        }
+
+        if (mounted) {
+          setState(() {
+            dummySpeech = reply;
+            _isThinking = false;
+          });
+        }
+
+        // TTS 실행
+        await _ttsService.speak(reply, userName);
+        didAssistantSpeak = true;
+        _lastAssistantEndTime = DateTime.now();
       }
-
-      // TTS 실행 전, _isThinking을 false로 바꾸면서 onStart에서 회색 유지
-      _isThinking = false;
-      await _ttsService.speak(reply, UserInfo.name ?? "unknown");
-
+      // 🔥🔥🔥 [여기까지가 Stage2에서는 실행하면 안 되는 부분임!] -------------------
       // 대화 로그 저장
       await _conversation.saveMessage(
         dbPath: widget.dbPath,
@@ -456,17 +499,89 @@ class _InCallScreenState extends State<InCallScreen> {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            Positioned(
-              top: 60,
-              child: SizedBox(
-                width: 120,
-                height: 50,
-                child: Image.asset(
-                  _trafficLightAsset,
-                  fit: BoxFit.fill,
-                ),
-              ),
+            /// ================== 신호등 + 투명 버튼 ==================
+            Builder(
+              builder: (context) {
+                final screenWidth = MediaQuery.of(context).size.width;
+                const trafficWidth = 120.0;
+                const trafficHeight = 50.0;
+
+                // 신호등 위치 계산
+                final trafficLeft = screenWidth / 2 - trafficWidth / 2;
+                final trafficRight = screenWidth / 2 + trafficWidth / 2;
+
+                const buttonHeight = trafficHeight * 4;
+
+                final isStage2 = (_conversation.conversationStage == 2);
+
+                return Stack(
+                  children: [
+                    // ★ 신호등
+                    Positioned(
+                      top: 60,
+                      left: trafficLeft,
+                      child: SizedBox(
+                        width: trafficWidth,
+                        height: trafficHeight,
+                        child: Image.asset(
+                          _trafficLightAsset,
+                          fit: BoxFit.fill,
+                        ),
+                      ),
+                    ),
+
+                    // ★ 왼쪽 버튼 (FAIL)
+                    Positioned(
+                      top: 60,
+                      left: 0,
+                      width: trafficLeft,
+                      height: buttonHeight,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onTap: isStage2
+                            ? () {
+                          debugPrint("[TrafficLight] FAIL 클릭됨");
+                          setState(() {
+                            _trafficLightAsset = 'assets/temp/red_traffic_light.png';
+                          });
+                        }
+                            : null, // 🔒 2단계가 아니면 클릭 불가
+                      ),
+                    ),
+
+                    // ★ 오른쪽 버튼 (SUCCESS)
+                    Positioned(
+                      top: 60,
+                      left: trafficRight,
+                      width: screenWidth - trafficRight,
+                      height: buttonHeight,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onTap: isStage2
+                            ? () {
+                          debugPrint("[TrafficLight] SUCCESS 클릭됨");
+
+                          // 신호등 초록색
+                          setState(() {
+                            _trafficLightAsset =
+                            'assets/temp/green_traffic_light.png';
+                          });
+
+                          // 3단계로 강제 이동
+                          _forceNextStage();
+                        }
+                            : null, // 🔒 2단계 아니면 클릭불가
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
+
+            /// ================== 신호등 + 투명 버튼 ==================
+
+
+
             Positioned(
               top: 120,
               child: Column(
