@@ -10,6 +10,7 @@ import '../models/character_settings_model.dart';
 import 'package:firebase_database/firebase_database.dart';
 import '../widgets/chat_bubble.dart';
 import '../widgets/hidden_touch_layer.dart';
+import '../services/scenario_service.dart';
 import '../services/mission_service.dart';
 
 
@@ -40,6 +41,7 @@ class _InCallScreenState extends State<InCallScreen> {
 
   late STTService _sttService;
   late TTSService _ttsService;
+  late ScenarioService _scenarioService;
   late MissionService _missionService;
   final GPTResponse gpt = GPTResponse();
 
@@ -52,8 +54,13 @@ class _InCallScreenState extends State<InCallScreen> {
     // 서비스 초기화
     _sttService = STTService(callId: "test_call_001");
     _ttsService = TTSService();
+    _scenarioService = ScenarioService();
     _missionService = MissionService();
-    _conversation = ConversationService(stt: _sttService, tts: _ttsService);
+    _conversation = ConversationService(
+        stt: _sttService,
+        tts: _ttsService,
+        scenarioService: _scenarioService
+    );
 
     // TTS 상태 스트림 감시 (음성 재생 중/완료 등)
     _ttsService.playerStateStream.listen((state) {
@@ -91,6 +98,20 @@ class _InCallScreenState extends State<InCallScreen> {
       await _initializeSTT();
       Future.delayed(const Duration(seconds: 1), _speakInitialGreeting);
     });
+
+    _initializeSession();
+  }
+
+  Future<void> _initializeSession() async {
+    final userName = UserInfo.name ?? "unknown";
+
+    // 앱 시작 시 랜덤 시나리오 로드
+    await _scenarioService.loadNewScenario(userName);
+
+    // 이후 캐릭터 설정 및 STT 초기화
+    await _loadCharacterSettings();
+    await _initializeSTT();
+    Future.delayed(const Duration(seconds: 1), _speakInitialGreeting);
   }
 
   // 왼쪽 히든 버튼 로직 (실패 처리)
@@ -118,7 +139,7 @@ class _InCallScreenState extends State<InCallScreen> {
     // 서비스 호출
     final result = await _missionService.handleFailure(
       userName: userName,
-      conversationService: _conversation,
+      scenarioService: _scenarioService,
       gpt: gpt,
     );
 
@@ -193,8 +214,7 @@ class _InCallScreenState extends State<InCallScreen> {
 
     setState(() => dummySpeech = greeting);
 
-    final conv = ConversationService(stt: _sttService, tts: _ttsService);
-    await conv.saveMessage(
+    await _conversation.saveMessage(
       dbPath: widget.dbPath,
       role: "z_assistant",
       text: greeting,

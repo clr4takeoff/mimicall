@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'conversation_service.dart';
+import 'scenario_service.dart';
 import 'llm_service.dart';
 
 /// 미션 결과 타입 정의
@@ -21,13 +21,10 @@ class MissionService {
   static const int maxFailures = 3;
 
   /// 실패 처리 메인 로직
-  /// - 카운트를 증가시킴
-  /// - 3회 미만이면 [retry] 반환
-  /// - 3회 도달하면 내부적으로 GPT를 호출하여 힌트를 생성하고 [hintMode] 반환
   Future<MissionResult> handleFailure({
     required String userName,
-    required ConversationService conversationService, // DB 조회를 위해 필요
-    required GPTResponse gpt, // 멘트 생성을 위해 필요
+    required ScenarioService scenarioService, // 데이터는 여기서 가져옴
+    required GPTResponse gpt,                 // 멘트 생성은 얘가 함
   }) async {
     _failureCount++;
     debugPrint("[MissionService] 실패 카운트: $_failureCount / $maxFailures");
@@ -38,16 +35,16 @@ class MissionService {
     }
 
     // 2. 3회 도달 -> 모방 유도(힌트) 로직 실행
-    debugPrint("[MissionService] 3회 누적! 모방 유도 로직 실행");
+    debugPrint("[MissionService] 3회 누적 - 모방 유도 로직 실행");
     _failureCount = 0; // 카운트 초기화
 
-    // A. 목표 발화(정답) 가져오기 (ConversationService 이용)
-    final targetSpeech = await conversationService.getTargetSpeech(userName);
+    // ScenarioService에 이미 저장된 목표 발화를 가져옴 (DB 조회 X)
+    final targetSpeech = scenarioService.currentTargetSpeech;
 
     String guideMessage;
 
     if (targetSpeech != null) {
-      // B. 힌트 프롬프트 구성 (이 로직이 MissionService로 이동됨)
+      // B. 힌트 프롬프트 구성
       final hintInstruction = """
       아이가 대답을 3번이나 어려워하고 있어. 지금은 아이가 자신감을 잃지 않게 도와줘야 해.
       네가 아이에게 정답을 직접적으로 알려줘.
