@@ -28,6 +28,8 @@ class _InCallScreenState extends State<InCallScreen> {
   bool _isThinking = false; // GPT 처리중
   String _trafficLightAsset = 'assets/temp/traffic_light.png';
   int stage2InternalTurn = 0;
+  int stage2FailCount = 0;
+  bool isForcedSkip = false;
 
 
   String dummySpeech = "";
@@ -42,6 +44,187 @@ class _InCallScreenState extends State<InCallScreen> {
   final GPTResponse gpt = GPTResponse();
 
   late ConversationService _conversation;
+
+
+  Future<void> _handleStage2Retry() async {
+    final userName = UserInfo.name ?? "친구";
+    String? contextText;
+    try {
+      final _db = FirebaseDatabase.instance.ref();
+      final ref = _db.child('preference/$userName/character_settings/contextText');
+      final snapshot = await ref.get();
+
+      if (snapshot.exists) {
+        contextText = snapshot.value.toString();
+        debugPrint("[Conversation] contextText 로드 완료: $contextText");
+      } else {
+        debugPrint("[Conversation] contextText 없음");
+      }
+    } catch (e) {
+      debugPrint("[Conversation] contextText 로드 실패: $e");
+    }
+    final retryPrompt = """
+너는 지금 2단계야. 아이가 대답을 맞추지 못했어.
+하지만 아이가 기분 나쁘지 않도록, 부드럽고 자연스럽게 다시 질문해야 해.
+      너는 '${contextText ?? "작은 문제가 생긴 상황"}' 상황을 겪고 있어 곤란한 상태야.
+      이 상황을 설명하면서 다시 도움을 요청해.
+      $userName이 너를 도와주는 영웅처럼 느끼게 해줘.
+규칙:
+- "틀렸어" 같은 표현 금지
+- 자연스럽고 힌트를 조금만 섞은 재질문
+- 아이가 다시 시도할 기회를 느끼게
+""";
+
+    setState(() {
+      dummySpeech = "음... 다시 생각해볼까?";
+      _isThinking = true;
+    });
+
+    final reply = await gpt.sendMessageToLLM(
+      "아이가 질문에 답하지 못했어. 다시 자연스럽게 물어봐줘.",
+      stageInstruction: retryPrompt,
+    );
+
+    setState(() {
+      dummySpeech = reply;
+      _isThinking = false;
+    });
+
+    await _ttsService.speak(reply, userName);
+    _lastAssistantEndTime = DateTime.now();
+  }
+
+
+  Future<void> restartstage2() async {
+    final userName = UserInfo.name ?? "친구";
+    setState(() {
+      _trafficLightAsset = 'assets/temp/traffic_light.png';
+      stage2FailCount = 0;
+      isForcedSkip = false;
+
+      _conversation.conversationStage = 2;
+
+      _isListening = false;  // 캐릭터 말할 때까지 OFF
+      _isThinking = true;
+      dummySpeech = "잠깐만...";
+    });
+
+    // Stage2 첫 질문 프롬프트 생성
+    final stage2Instruction = await _conversation.getStageInstruction(
+      username: userName,
+      characterName: _characterName,
+    );
+
+    final firstQuestion = await gpt.sendMessageToLLM(
+      "Stage2 문제 상황을 기억해. ",
+      stageInstruction: stage2Instruction,
+    );
+
+    setState(() {
+      dummySpeech = firstQuestion;
+      _isThinking = false;
+    });
+
+    // 캐릭터가 Stage2 첫 질문 말하기
+    await _ttsService.speak(firstQuestion, userName);
+
+    // 캐릭터 말 끝 → 아이 말 가능
+    setState(() {
+      _isThinking = false;
+      _isGreeting = false;
+    });
+
+
+    _lastAssistantEndTime = DateTime.now();
+  }
+
+
+
+  Future<void> _goToStage5() async {
+    debugPrint("[Stage5] 강제 스킵 실행");
+
+    setState(() {
+      _isListening = false;
+      _isThinking = true;
+      dummySpeech = "잠깐만…";
+    });
+
+    final userName = UserInfo.name ?? "친구";
+
+    final stage5Instruction = """
+너는 Stage5야.
+
+역할:
+1. 아이가 틀린 문제를 자연스럽게 설명하고 정답을 알려줘.
+2. 아이가 노력한 것에 대해 따뜻하게 칭찬해.
+3. 너무 길지 않게 말해 (2~3문장)
+금지:
+- 부정적 표현
+- 아이 기죽이는 말
+""";
+
+    final reply = await gpt.sendMessageToLLM(
+      "아이에게 문제의 정답을 알려주고 부드럽게 칭찬해줘.",
+      stageInstruction: stage5Instruction,
+    );
+
+    setState(() {
+      dummySpeech = reply;
+      _isThinking = false;
+    });
+
+    await _ttsService.speak(reply, userName);
+
+    await Future.delayed(const Duration(milliseconds: 400));
+
+    //-------------------------------------------------------
+    // Stage5 끝 → Stage2 재시작
+    //-------------------------------------------------------
+
+    await restartstage2();
+
+  }
+
+  Future<void> complimentaftersuccess() async {
+    setState(() {
+      _isListening = false;
+      _isThinking = true;
+    });
+
+    final userName = UserInfo.name ?? "친구";
+
+    final stage5Instruction = """
+
+역할:
+1. 아이가 정답을 말한 것을 크게 칭찬해줘
+2. 아이가 노력한 것에 대해 따뜻하게 칭찬해.
+3. 너무 길지 않게 말해 (2~3문장)
+금지:
+- 부정적 표현
+- 아이 기죽이는 말
+""";
+
+    final reply = await gpt.sendMessageToLLM(
+      "아이에게 부드럽게 칭찬해줘.",
+      stageInstruction: stage5Instruction,
+    );
+
+    setState(() {
+      dummySpeech = reply;
+      _isThinking = false;
+    });
+
+    await _ttsService.speak(reply, userName);
+
+    await Future.delayed(const Duration(milliseconds: 400));
+
+    //-------------------------------------------------------
+    // 칭찬 끝 → Stage2 재시작
+    //-------------------------------------------------------
+
+    await restartstage2();
+  }
+
 
   @override
   void initState() {
@@ -446,6 +629,7 @@ class _InCallScreenState extends State<InCallScreen> {
         setState(() => _isThinking = false);
       }
     }
+    _onEndCall();
   }
   // 말하기 버튼: STT 수동 제어
   Future<void> _toggleRecording() async {
@@ -539,13 +723,25 @@ class _InCallScreenState extends State<InCallScreen> {
                       child: GestureDetector(
                         behavior: HitTestBehavior.translucent,
                         onTap: isStage2
-                            ? () {
-                          debugPrint("[TrafficLight] FAIL 클릭됨");
+                            ? () async {
+                          debugPrint("[TrafficLight] FAIL 버튼 클릭");
+
                           setState(() {
+                            stage2FailCount++;
                             _trafficLightAsset = 'assets/temp/red_traffic_light.png';
                           });
+
+                          // 3번 실패 → 강제 스킵 가능
+                          if (stage2FailCount >= 3) {
+                            debugPrint("[Stage2] 실패 3회 → Stage5로 이동 가능");
+                            isForcedSkip = true;
+                            _handleStage2Retry();
+                          } else {
+                            // 실패 1~2회 → GPT가 자연스럽게 다시 물어보기
+                            _handleStage2Retry();
+                          }
                         }
-                            : null, // 🔒 2단계가 아니면 클릭 불가
+                        : null, // 🔒 2단계가 아니면 클릭 불가
                       ),
                     ),
 
@@ -566,9 +762,8 @@ class _InCallScreenState extends State<InCallScreen> {
                             _trafficLightAsset =
                             'assets/temp/green_traffic_light.png';
                           });
-
-                          // 3단계로 강제 이동
-                          _forceNextStage();
+                          //엄청난 칭찬하기
+                          complimentaftersuccess();
                         }
                             : null, // 🔒 2단계 아니면 클릭불가
                       ),
@@ -682,7 +877,7 @@ class _InCallScreenState extends State<InCallScreen> {
                   FloatingActionButton(
                     heroTag: 'next',
                     backgroundColor: const Color(0xFF7CCAF3),
-                    onPressed: _forceNextStage,
+                    onPressed: isForcedSkip? () {_goToStage5();}:null,
                     child: const Icon(
                       Icons.arrow_forward_rounded,
                       size: 36,
@@ -695,7 +890,7 @@ class _InCallScreenState extends State<InCallScreen> {
                   FloatingActionButton(
                     heroTag: 'end',
                     backgroundColor: const Color(0xFFFF6B6B),
-                    onPressed: _onEndCall,
+                    onPressed: _forceNextStage,
                     child: const Icon(Icons.call_end, size: 36),
                   ),
 
