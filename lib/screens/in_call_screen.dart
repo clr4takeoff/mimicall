@@ -64,7 +64,7 @@ class _InCallScreenState extends State<InCallScreen> {
       debugPrint("[Conversation] contextText 로드 실패: $e");
     }
     final retryPrompt = """
-너는 지금 2단계야. 아이가 대답을 맞추지 못했어.
+너는 지금 2단계야. 아이가 대답을 맞추지 못했어. 아이와 이전에 나눈 대화내용은 언급하지 마.
 하지만 아이가 기분 나쁘지 않도록, 부드럽고 자연스럽게 다시 질문해야 해.
       너는 '${contextText ?? "작은 문제가 생긴 상황"}' 상황을 겪고 있어 곤란한 상태야.
       이 상황을 설명하면서 다시 도움을 요청해.
@@ -73,6 +73,7 @@ class _InCallScreenState extends State<InCallScreen> {
 - "틀렸어" 같은 표현 금지
 - 자연스럽고 힌트를 조금만 섞은 재질문
 - 아이가 다시 시도할 기회를 느끼게
+- 아이와 이전에 나눈 대화내용은 언급하지 않을 것. 오직 문제상황에 대해 언급할 것.
 """;
 
     setState(() {
@@ -81,7 +82,7 @@ class _InCallScreenState extends State<InCallScreen> {
     });
 
     final reply = await gpt.sendMessageToLLM(
-      "아이가 질문에 답하지 못했어. 다시 자연스럽게 물어봐줘.",
+      "아이가 질문에 답하지 못했어. 다시 자연스럽게 물어봐줘.아이와 이전에 나눈 대화내용은 언급하지 마.",
       stageInstruction: retryPrompt,
     );
 
@@ -877,7 +878,10 @@ class _InCallScreenState extends State<InCallScreen> {
                   FloatingActionButton(
                     heroTag: 'next',
                     backgroundColor: const Color(0xFF7CCAF3),
-                    onPressed: isForcedSkip? () {_goToStage5();}:null,
+                    onPressed: (isForcedSkip &&
+                        !_ttsService.isPlaying &&
+                        !_isThinking &&
+                        !_isGreeting)? () {_goToStage5();}:null,
                     child: const Icon(
                       Icons.arrow_forward_rounded,
                       size: 36,
