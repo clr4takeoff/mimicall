@@ -9,6 +9,7 @@ import '../utils/user_info.dart';
 import '../models/character_settings_model.dart';
 import 'package:firebase_database/firebase_database.dart';
 import '../widgets/chat_bubble.dart';
+import '../widgets/hidden_touch_layer.dart';
 
 
 class InCallScreen extends StatefulWidget {
@@ -87,6 +88,18 @@ class _InCallScreenState extends State<InCallScreen> {
       await _initializeSTT();
       Future.delayed(const Duration(seconds: 1), _speakInitialGreeting);
     });
+  }
+
+  // 왼쪽 히든 버튼 로직
+  void _onLeftHiddenTap() {
+    debugPrint("왼쪽 투명 버튼 누름 - 실패 진행");
+    // TODO: 실패 로직 구현
+  }
+
+  // 오른쪽 히든 버튼 로직
+  void _onRightHiddenTap() {
+    debugPrint("오른쪽 투명 버튼 눌림 - 성공 진행");
+    // TODO: 성공 로직 구현
   }
 
   Future<void> _speakInitialGreeting() async {
@@ -596,6 +609,11 @@ class _InCallScreenState extends State<InCallScreen> {
                   ),
                 ],
               ),
+            ),
+            HiddenTouchLayer(
+              height: 200,
+              onLeftTap: _onLeftHiddenTap,
+              onRightTap: _onRightHiddenTap,
             ),
           ],
         ),

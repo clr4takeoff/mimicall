@@ -138,6 +138,7 @@ class STTService {
         onResult?.call(clean);
       } else {
         debugPrint("[STT] 중복 결과 무시");
+        onResult?.call(clean); // TODO: avd 테스트용, 이후 제거 요망
       }
     } else {
       debugPrint("[STT 오류] ${response.statusCode}: $body");
