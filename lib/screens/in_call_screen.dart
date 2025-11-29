@@ -136,7 +136,7 @@ class _InCallScreenState extends State<InCallScreen> {
 
         gpt.initializeCharacterContext(
           characterName: settings.characterName,
-          context: settings.contextText,
+          context: settings.contextList.join(", "),
           style: settings.speakingStyle,
           targetSpeechCount: settings.targetSpeechCount,
         );

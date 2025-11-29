@@ -2,8 +2,8 @@ class CharacterSettings {
   final String? imageBase64;
   final String voicePath;
   final String characterName;
-  final String contextText;
-  final String targetSpeech;
+  final List<String> contextList;
+  final List<String> targetList;
   final String speakingStyle;
   final int targetSpeechCount;
   final int focusTime;
@@ -12,8 +12,8 @@ class CharacterSettings {
     this.imageBase64,
     this.voicePath = '기본 음성',
     this.characterName = '',
-    this.contextText = '',
-    this.targetSpeech = '',
+    this.contextList = const [],
+    this.targetList = const [],
     this.speakingStyle = 'encouraging',
     this.targetSpeechCount = 1,
     this.focusTime = 10,
@@ -23,8 +23,8 @@ class CharacterSettings {
     String? imageBase64,
     String? voicePath,
     String? characterName,
-    String? contextText,
-    String? targetSpeech,
+    List<String>? contextList,
+    List<String>? targetList,
     String? speakingStyle,
     int? targetSpeechCount,
     int? focusTime,
@@ -33,8 +33,8 @@ class CharacterSettings {
       imageBase64: imageBase64 ?? this.imageBase64,
       voicePath: voicePath ?? this.voicePath,
       characterName: characterName ?? this.characterName,
-      contextText: contextText ?? this.contextText,
-      targetSpeech: targetSpeech ?? this.targetSpeech,
+      contextList: contextList ?? this.contextList,
+      targetList: targetList ?? this.targetList,
       speakingStyle: speakingStyle ?? this.speakingStyle,
       targetSpeechCount: targetSpeechCount ?? this.targetSpeechCount,
       focusTime: focusTime ?? this.focusTime,
@@ -45,8 +45,8 @@ class CharacterSettings {
     'imageBase64': imageBase64,
     'voicePath': voicePath,
     'characterName': characterName,
-    'contextText': contextText,
-    'targetSpeech': targetSpeech,
+    'contextList': contextList,
+    'targetList': targetList,
     'speakingStyle': speakingStyle,
     'targetSpeechCount': targetSpeechCount,
     'focusTime': focusTime,
@@ -57,8 +57,8 @@ class CharacterSettings {
       imageBase64: json['imageBase64'],
       voicePath: json['voicePath'] ?? '기본 음성',
       characterName: json['characterName'] ?? '',
-      contextText: json['contextText'] ?? '',
-      targetSpeech: json['targetSpeech'] ?? '',
+      contextList: List<String>.from(json['contextList'] ?? []),
+      targetList: List<String>.from(json['targetList'] ?? []),
       speakingStyle: json['speakingStyle'] ?? 'encouraging',
       targetSpeechCount: json['targetSpeechCount'] ?? 1,
       focusTime: json['focusTime'] ?? 10,

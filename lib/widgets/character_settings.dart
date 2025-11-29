@@ -31,12 +31,7 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool _isPlaying = false;
 
-  CharacterSettings settings = const CharacterSettings(
-    imageBase64: null,
-    voicePath: '기본 음성',
-    contextText: '없음',
-    targetSpeech: '',
-  );
+  CharacterSettings settings = const CharacterSettings();
 
   @override
   void initState() {
@@ -501,18 +496,20 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
                 leading: const Icon(Icons.chat_bubble_outline_rounded,
                     color: Color(0xFF91b32e)),
                 title: const Text('대화 상황 / 목표 발화 설정'),
+                // [변경 포인트] 내용을 나열하는 대신 개수만 표시
                 subtitle: Text(
-                  '상황: ${settings.contextText}\n목표 발화: ${settings.targetSpeech.isEmpty ? "없음" : settings.targetSpeech}',
-                  style:
-                  const TextStyle(color: Colors.black54, fontSize: 13),
+                  settings.contextList.isEmpty
+                      ? '설정된 세트가 없습니다.'
+                      : '대화 세트 ${settings.contextList.length}개',
+                  style: const TextStyle(color: Colors.black54, fontSize: 13),
                 ),
                 onTap: () async {
                   final result = await _showContextAndTargetDialog(context);
                   if (result != null) {
                     setState(() {
                       settings = settings.copyWith(
-                        contextText: result['contextText'] ?? '',
-                        targetSpeech: result['targetSpeech'] ?? '',
+                        contextList: result['contextList'] ?? [],
+                        targetList: result['targetList'] ?? [],
                       );
                     });
                   }
@@ -622,89 +619,232 @@ class _CharacterSettingsDialogState extends State<CharacterSettingsDialog> {
     );
   }
 
-  /// 상황 + 목표 발화 입력 다이얼로그
-  Future<Map<String, String>?> _showContextAndTargetDialog(
+  /// 상황 + 목표 발화 입력 다이얼로그 (삭제 기능 보완)
+  Future<Map<String, List<String>>?> _showContextAndTargetDialog(
       BuildContext context) async {
-    final contextController = TextEditingController(text: settings.contextText);
-    final targetController = TextEditingController(text: settings.targetSpeech);
+    // 1. 기존 데이터를 컨트롤러 쌍으로 변환하여 초기화
+    int maxLength = settings.contextList.length > settings.targetList.length
+        ? settings.contextList.length
+        : settings.targetList.length;
 
-    return showDialog<Map<String, String>>(
+    List<Map<String, TextEditingController>> pairs = [];
+
+    for (int i = 0; i < maxLength; i++) {
+      String ctx = i < settings.contextList.length ? settings.contextList[i] : "";
+      String tgt = i < settings.targetList.length ? settings.targetList[i] : "";
+
+      pairs.add({
+        'context': TextEditingController(text: ctx),
+        'target': TextEditingController(text: tgt),
+      });
+    }
+
+    // 데이터가 없으면 빈 세트 하나 추가
+    if (pairs.isEmpty) {
+      pairs.add({
+        'context': TextEditingController(),
+        'target': TextEditingController(),
+      });
+    }
+
+    return showDialog<Map<String, List<String>>>(
       context: context,
-      builder: (_) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFFFFF7E9),
-          shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text(
-            '상황과 목표 발화 설정',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF5D4037),
-            ),
-          ),
-          contentPadding: EdgeInsets.zero,
-          content: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('🪄 아이가 연습할 발화 상황',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF5D4037),
-                        fontSize: 14)),
-                const SizedBox(height: 6),
-                TextField(
-                  controller: contextController,
-                  maxLines: 2,
-                  decoration: InputDecoration(
-                    hintText: '예: 목말라서 물을 마시고 싶은데 말하지 못하는 상황',
-                    hintStyle: const TextStyle(color: Colors.black38),
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFFFFF7E9),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: const Text(
+                '대화 세트 설정',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF5D4037),
                 ),
-                const SizedBox(height: 20),
-                const Text('🎯 아이가 말하길 원하는 문장',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF5D4037),
-                        fontSize: 14)),
-                const SizedBox(height: 6),
-                TextField(
-                  controller: targetController,
-                  maxLines: 2,
-                  decoration: InputDecoration(
-                    hintText: '예: 물 주세요, 물 마실래요',
-                    hintStyle: const TextStyle(color: Colors.black38),
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 12.0),
+                      child: Text(
+                        "상황과 그에 맞는 목표 발화를 세트로 입력해주세요.",
+                        style: TextStyle(fontSize: 13, color: Colors.black54),
+                      ),
+                    ),
+                    Flexible(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: pairs.length,
+                        separatorBuilder: (context, index) =>
+                        const Divider(height: 24),
+                        itemBuilder: (context, index) {
+                          // 중요: 삭제 시 텍스트 꼬임 방지를 위해 Key 추가
+                          return Column(
+                            key: ObjectKey(pairs[index]),
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // 세트 번호 및 삭제 버튼 row
+                              Row(
+                                mainAxisAlignment:
+                                MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    "Set ${index + 1}",
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.orangeAccent,
+                                    ),
+                                  ),
+                                  // 세트가 1개 이상일 때만 삭제 버튼 표시
+                                  if (pairs.length > 1)
+                                    InkWell(
+                                      onTap: () {
+                                        // 삭제 로직: 리스트에서 제거하고 화면 갱신
+                                        setState(() {
+                                          pairs.removeAt(index);
+                                        });
+                                      },
+                                      borderRadius: BorderRadius.circular(20),
+                                      child: const Padding(
+                                        padding: EdgeInsets.all(4.0),
+                                        child: Icon(Icons.close,
+                                            size: 20, color: Colors.redAccent),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+
+                              // 상황 입력
+                              const Text(
+                                "상황",
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF5D4037),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              TextField(
+                                controller: pairs[index]['context'],
+                                decoration: InputDecoration(
+                                  hintText: "예: 친구가 장난감을 뺏어갔을 때",
+                                  hintStyle: TextStyle(
+                                      color: Colors.grey.shade400, fontSize: 13),
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 12),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+
+                              // 목표 발화 입력
+                              const Text(
+                                "목표 발화",
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF5D4037),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              TextField(
+                                controller: pairs[index]['target'],
+                                decoration: InputDecoration(
+                                  hintText: "예: 내 장난감 돌려줘",
+                                  hintStyle: TextStyle(
+                                      color: Colors.grey.shade400, fontSize: 13),
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 12),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // 세트 추가 버튼
+                    TextButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          pairs.add({
+                            'context': TextEditingController(),
+                            'target': TextEditingController(),
+                          });
+                        });
+                      },
+                      icon: const Icon(Icons.add_circle_outline,
+                          color: Color(0xFFA98D15)),
+                      label: const Text(
+                        "세트 추가하기",
+                        style: TextStyle(color: Color(0xFFA98D15)),
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFF75502C),
+                      ),
+                    )
+                  ],
                 ),
+              ),
+              actions: [
+                TextButton(
+                  child: const Text("취소"),
+                  onPressed: () => Navigator.pop(context),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFFB74D),
+                  ),
+                  child:
+                  const Text("확인", style: TextStyle(color: Colors.white)),
+                  onPressed: () {
+                    // 저장 로직: 현재 pairs에 남아있는 항목만 저장됨
+                    List<String> newContextList = [];
+                    List<String> newTargetList = [];
+
+                    for (var pair in pairs) {
+                      String c = pair['context']!.text.trim();
+                      String t = pair['target']!.text.trim();
+
+                      // 둘 중 하나라도 내용이 있으면 저장
+                      if (c.isNotEmpty || t.isNotEmpty) {
+                        newContextList.add(c);
+                        newTargetList.add(t);
+                      }
+                    }
+
+                    // 삭제된 항목은 제외되고 최종 리스트만 반환됨
+                    Navigator.pop(context, {
+                      'contextList': newContextList,
+                      'targetList': newTargetList,
+                    });
+                  },
+                )
               ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('취소'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFFB74D)),
-              onPressed: () {
-                Navigator.pop(context, {
-                  'contextText': contextController.text,
-                  'targetSpeech': targetController.text,
-                });
-              },
-              child: const Text('확인'),
-            ),
-          ],
+            );
+          },
         );
       },
     );
   }
+
 
   /// 대화 스타일 선택
   Future<String?> _showSpeakingStyleDialog(BuildContext context) async {
