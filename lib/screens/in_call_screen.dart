@@ -10,6 +10,7 @@ import '../models/character_settings_model.dart';
 import 'package:firebase_database/firebase_database.dart';
 import '../widgets/chat_bubble.dart';
 import '../widgets/hidden_touch_layer.dart';
+import '../services/mission_service.dart';
 
 
 class InCallScreen extends StatefulWidget {
@@ -28,7 +29,7 @@ class _InCallScreenState extends State<InCallScreen> {
   bool _isGreeting = false;
   bool _isListening = false; // 사용자가 현재 말하고 있는지 여부. 버튼 조작
   bool _isThinking = false; // GPT 처리중
-
+  bool _isHintMode = false;
 
   String dummySpeech = "";
   String childSpeech = "";
@@ -39,6 +40,7 @@ class _InCallScreenState extends State<InCallScreen> {
 
   late STTService _sttService;
   late TTSService _ttsService;
+  late MissionService _missionService;
   final GPTResponse gpt = GPTResponse();
 
   late ConversationService _conversation;
@@ -50,6 +52,7 @@ class _InCallScreenState extends State<InCallScreen> {
     // 서비스 초기화
     _sttService = STTService(callId: "test_call_001");
     _ttsService = TTSService();
+    _missionService = MissionService();
     _conversation = ConversationService(stt: _sttService, tts: _ttsService);
 
     // TTS 상태 스트림 감시 (음성 재생 중/완료 등)
@@ -90,16 +93,92 @@ class _InCallScreenState extends State<InCallScreen> {
     });
   }
 
-  // 왼쪽 히든 버튼 로직
-  void _onLeftHiddenTap() {
-    debugPrint("왼쪽 투명 버튼 누름 - 실패 진행");
-    // TODO: 실패 로직 구현
+  // 왼쪽 히든 버튼 로직 (실패 처리)
+  Future<void> _onLeftHiddenTap() async {
+    final userName = UserInfo.name ?? "unknown";
+
+    // 1. [모방 모드일 때] 왼쪽 버튼 클릭 -> 힌트 TTS 재생 (듣고 따라하기 시도)
+    if (_isHintMode) {
+      debugPrint("모방 모드 중 왼쪽 클릭 -> 힌트 오디오 재생");
+
+      if (_ttsService.isPlaying) await _ttsService.stop();
+
+      // 화면에 떠있는 dummySpeech를 읽어줌
+      await _ttsService.speak(dummySpeech, userName);
+      return;
+    }
+
+    // 2. [일반 모드일 때] 실패 카운트 증가 로직
+    debugPrint("일반 모드 왼쪽(실패) 버튼 눌림");
+
+    // 동작 중단
+    await _ttsService.stop();
+    await _sttService.stopListening(tempStop: true);
+
+    // 서비스 호출
+    final result = await _missionService.handleFailure(
+      userName: userName,
+      conversationService: _conversation,
+      gpt: gpt,
+    );
+
+    if (!mounted) return;
+
+    if (result.type == MissionResultType.hintMode) {
+      // 3회 누적 -> 모방 모드 진입
+      debugPrint("3회 누적, 힌트 텍스트 표시 (TTS 대기)");
+
+      final hintMessage = result.message!;
+
+      setState(() {
+        dummySpeech = hintMessage; // 텍스트 갱신
+        _isHintMode = true; // 모방모드 활성화
+        _isThinking = false;
+      });
+
+      // DB 저장 (타입: hint_guide)
+      await _conversation.saveMessage(
+        dbPath: widget.dbPath,
+        role: "z_assistant",
+        text: hintMessage,
+        extra: {"type": "hint_guide"},
+      );
+
+      // speak() 호출하지 않음
+      // 다시 왼쪽 버튼을 눌러야 소리남
+
+    } else {
+      // 3회 미만 -> 단순 재질문 (기존 로직)
+      debugPrint("재시도 모드 (${_missionService.currentFailureCount}/3)");
+
+      setState(() => _isThinking = false);
+
+      // 기존 질문 다시 읽기
+      await _ttsService.speak(dummySpeech, userName);
+    }
   }
 
-  // 오른쪽 히든 버튼 로직
-  void _onRightHiddenTap() {
-    debugPrint("오른쪽 투명 버튼 눌림 - 성공 진행");
-    // TODO: 성공 로직 구현
+  // 오른쪽 히든 버튼 로직 (성공 처리)
+  Future<void> _onRightHiddenTap() async {
+    debugPrint("오른쪽(성공) 버튼 눌림");
+
+    // 동작 중지
+    await _ttsService.stop();
+    await _sttService.stopListening(tempStop: true);
+
+    // 성공했으므로 모방 모드 해제
+    if (_isHintMode) {
+      debugPrint("모방 성공, 모방모드 해제");
+      setState(() {
+        _isHintMode = false;
+      });
+    }
+
+    // 실패 카운트 리셋
+    _missionService.reset();
+
+    // 칭찬 및 3단계 이동
+    await _forceNextStage();
   }
 
   Future<void> _speakInitialGreeting() async {

@@ -2,6 +2,7 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
 import '/services/stt_service.dart';
 import '/services/tts_service.dart';
+import '/services/llm_service.dart'; // [추가] GPTResponse 타입을 위해 필요
 
 class ConversationService {
   final _db = FirebaseDatabase.instance.ref();
@@ -79,14 +80,12 @@ class ConversationService {
 
   // 턴 수에 따라 단계를 변경하는 로직
   void _updateConversationStage() {
-    // 예시: 1~2턴(1단계), 3~5턴(2단계), 10턴 이상(3단계)
+    // 예시: 1~2턴(1단계), 3턴 이상(2단계)
     if (turnCount < 3) {
       conversationStage = 1;
-    } else if (turnCount < 10) {
-      conversationStage = 2;
     } else {
-      conversationStage = 3; // TODO: 2단계 로직 구성 후 next버튼을 통해 도달할 수 있게 수정
-    }
+      conversationStage = 2;
+    } // 3단계 삭제
   }
 
   void registerUserSpeech(String userText) {
@@ -95,8 +94,6 @@ class ConversationService {
     turnCount++;
 
     final prevStage = conversationStage;
-
-    // 복잡한 검사 없이 턴 수만 확인하여 단계 업데이트로 구현
     _updateConversationStage();
 
     debugPrint("[Conversation] 발화 감지 | 턴: $turnCount | 단계: ${_stageName(conversationStage)}");
@@ -108,14 +105,10 @@ class ConversationService {
 
   String _stageName(int stage) {
     switch (stage) {
-      case 1:
-        return "1단계 (라포)";
-      case 2:
-        return "2단계 (도움 요청)";
-      case 3:
-        return "3단계 (마무리)";
-      default:
-        return "알 수 없음";
+      case 1: return "1단계 (라포)";
+      case 2: return "2단계 (도움 요청)";
+      case 3: return "3단계 (마무리)";
+      default: return "알 수 없음";
     }
   }
 
@@ -157,6 +150,51 @@ class ConversationService {
       debugPrint("[Firebase] 저장 완료 → $safePath/conversation/messages/$msgId");
     } catch (e) {
       debugPrint("[Firebase] 저장 오류: $e");
+    }
+  }
+
+  // DB에서 목표 발화(Target Speech) 가져오기
+  Future<String?> getTargetSpeech(String username) async {
+    try {
+      // 1. 현재 로드된 컨텍스트가 없으면 재로딩 시도
+      if (contextText == null) {
+        await loadCharacterContext(username);
+      }
+      if (contextText == null) return null;
+
+      // 2. DB에서 contextList와 targetList 전체를 가져옴
+      final ref = _db.child('preference/$username/character_settings');
+      final snapshot = await ref.get();
+
+      if (!snapshot.exists) return null;
+
+      final data = Map<String, dynamic>.from(snapshot.value as Map);
+
+      final List<dynamic> contextList = List.from(data['contextList'] ?? []);
+      final List<dynamic> targetList = List.from(data['targetList'] ?? []);
+
+      // 3. 현재 contextText가 contextList의 몇 번째인지 인덱스 찾기
+      int index = -1;
+      for (int i = 0; i < contextList.length; i++) {
+        // DB 저장 형식에 따라 문자열 비교
+        if (contextList[i].toString() == contextText) {
+          index = i;
+          break;
+        }
+      }
+
+      // 4. 매칭되는 인덱스가 있고, targetList에도 해당 인덱스가 있다면 반환
+      if (index != -1 && index < targetList.length) {
+        final targetSpeech = targetList[index].toString();
+        debugPrint("[Conversation] 목표 발화 찾음: $targetSpeech (인덱스: $index)");
+        return targetSpeech;
+      } else {
+        debugPrint("[Conversation] 매칭되는 목표 발화를 찾을 수 없음 (Context: $contextText)");
+        return null;
+      }
+    } catch (e) {
+      debugPrint("[Conversation] 목표 발화 로드 중 오류: $e");
+      return null;
     }
   }
 }
