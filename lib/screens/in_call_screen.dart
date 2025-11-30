@@ -342,6 +342,7 @@ class _InCallScreenState extends State<InCallScreen> {
       final stageInstruction = await _conversation.getStageInstruction(
         username: userName,
         characterName: _characterName,
+        dbPath: widget.dbPath,
       );
 
       // GPT 응답 생성
@@ -428,7 +429,7 @@ class _InCallScreenState extends State<InCallScreen> {
       );
 
       // 이미지 생성 (옵션)
-      const bool useDalle = true; // 개발 테스트용 -> false
+      const bool useDalle = false; // 개발 테스트용 -> false
       String imageBase64 = "";
 
       if (useDalle) {
@@ -609,6 +610,7 @@ class _InCallScreenState extends State<InCallScreen> {
     final nextStageInstruction = await _conversation.getStageInstruction(
       username: userName,
       characterName: _characterName,
+      dbPath: widget.dbPath,
     );
 
     // GPT에게 새로운 문제 상황 연기 요청

@@ -8,10 +8,12 @@ class ScenarioService {
   // 현재 선택된 시나리오 저장 변수
   String? _currentContext;      // 예: "장난감 달라고 할 때"
   String? _currentTargetSpeech; // 예: "장난감 주세요"
+  int? _contextIndex;
 
   // 외부에서 읽기만 가능한 Getter
   String? get currentContext => _currentContext;
   String? get currentTargetSpeech => _currentTargetSpeech;
+  int? get contextIndex => _contextIndex;
 
   /// 새로운 랜덤 시나리오 불러오기 (앱 시작 시 or 2단계 진입 시 호출)
   Future<void> loadNewScenario(String username) async {
@@ -43,6 +45,8 @@ class ScenarioService {
       _currentContext = contextList[randomIndex].toString();
       _currentTargetSpeech = targetList[randomIndex].toString();
 
+      _contextIndex = randomIndex;
+
       debugPrint("[Scenario] 시나리오 확정 (Index: $randomIndex)");
       debugPrint("   - 상황: $_currentContext");
       debugPrint("   - 목표: $_currentTargetSpeech");
@@ -56,5 +60,6 @@ class ScenarioService {
   void clear() {
     _currentContext = null;
     _currentTargetSpeech = null;
+    _contextIndex = null;
   }
 }

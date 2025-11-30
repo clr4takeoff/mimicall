@@ -30,6 +30,7 @@ class ConversationService {
   Future<String> getStageInstruction({
     required String username,
     required String characterName,
+    required String dbPath,
   }) async {
 
     if (conversationStage == 2) {
@@ -38,6 +39,39 @@ class ConversationService {
       }
 
       final currentSituation = scenarioService.currentContext ?? "도움이 필요한 상황";
+
+      if (scenarioService.contextIndex != null) {
+        try {
+          final reportRef = _db.child(dbPath);
+          final snapshot = await reportRef.get(); // 현재 리포트 데이터를 먼저 읽어옴
+
+          List<int> contextIdList = [];
+
+          if (snapshot.exists) {
+            final data = Map<String, dynamic>.from(snapshot.value as Map);
+            final rawContextIds = data['contextId'];
+
+            // 기존 contextId가 List 형태이면 불러오고, 아니면 무시
+            if (rawContextIds is List) {
+              contextIdList = List<int>.from(rawContextIds.whereType<int>());
+            } else if (rawContextIds is int) {
+              // 혹시 과거에 int로 저장된 것이 있다면 리스트로 시작
+              contextIdList = [rawContextIds];
+            }
+          }
+
+          // 새 Index를 리스트에 추가
+          contextIdList.add(scenarioService.contextIndex!);
+
+          await reportRef.update({
+            // List<int> 형태로 덮어쓰기: 'contextId': [0, 3, 5]
+            'contextId': contextIdList,
+          });
+          debugPrint("[Firebase] 리포트 메타데이터 업데이트 완료 (contextId: ${scenarioService.contextIndex})");
+        } catch (e) {
+          debugPrint("[Firebase] 리포트 메타데이터 업데이트 실패: $e");
+        }
+      }
 
       return """
       [중요: 새로운 장면 시작]

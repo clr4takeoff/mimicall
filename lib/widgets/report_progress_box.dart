@@ -16,7 +16,7 @@ class _ReportProgressBoxState extends State<ReportProgressBox> {
   int? _targetFocusTime;
   int _actualSpeechCount = 0;
   int _actualFocusTime = 0; // 분 단위
-  String? _goalContext;
+  List<String> _goalContexts = []; // 모든 미션 상황을 저장할 리스트
 
   bool _isLoading = true;
 
@@ -30,7 +30,27 @@ class _ReportProgressBoxState extends State<ReportProgressBox> {
     try {
       final userName = UserInfo.name ?? "unknown";
 
-      // 1️⃣ 목표 데이터 불러오기
+      // 1-1 리포트 메타데이터에서 contextId 리스트 불러오기
+      final reportMetadataRef = FirebaseDatabase.instance.ref(
+          "reports/$userName/${widget.report.id}");
+      final reportMetadataSnap = await reportMetadataRef.get();
+
+      List<int> contextIdIndices = []; // 리포트에 저장된 모든 상황 ID
+
+      if (reportMetadataSnap.exists) {
+        final rData = Map<String, dynamic>.from(reportMetadataSnap.value as Map);
+        final rawContextIds = rData["contextId"];
+
+        // contextId가 List 형태인 경우 모든 인덱스 저장
+        if (rawContextIds is List) {
+          contextIdIndices = List<int>.from(rawContextIds.whereType<int>());
+        } else if (rawContextIds is int) {
+          // 과거 데이터 호환성을 위해 단일 int도 List로 변환
+          contextIdIndices = [rawContextIds];
+        }
+      }
+
+      // 1-2 환경 설정 및 목표치 불러오기
       final settingsRef = FirebaseDatabase.instance
           .ref("preference/$userName/character_settings");
       final settingsSnap = await settingsRef.get();
@@ -39,10 +59,34 @@ class _ReportProgressBoxState extends State<ReportProgressBox> {
         final data = Map<String, dynamic>.from(settingsSnap.value as Map);
         _targetSpeechCount = data["targetSpeechCount"] ?? 0;
         _targetFocusTime = data["focusTime"] ?? 0;
-        _goalContext = data["contextText"];
+
+        // contextList에서 모든 contextId에 해당하는 텍스트 찾기
+        final rawContextList = data["contextList"];
+        List<String> foundContexts = [];
+
+        if (rawContextList != null) {
+          for (int index in contextIdIndices) {
+            String? contextText;
+
+            if (rawContextList is List && index >= 0 && index < rawContextList.length) {
+              contextText = rawContextList[index];
+            } else if (rawContextList is Map) {
+              contextText = rawContextList[index.toString()] ?? rawContextList[index];
+            }
+
+            // 텍스트를 찾았으면 리스트에 추가
+            if (contextText != null) {
+              foundContexts.add(contextText);
+            } else {
+              foundContexts.add("상황 정보 없음 (Index: $index)");
+            }
+          }
+        }
+
+        _goalContexts = foundContexts;
       }
 
-      // 2️⃣ 실제 대화 데이터 불러오기
+      // 2. 실제 대화 데이터 불러오기
       final convRef = FirebaseDatabase.instance.ref(
         "reports/$userName/${widget.report.id}/conversation/messages",
       );
@@ -65,18 +109,20 @@ class _ReportProgressBoxState extends State<ReportProgressBox> {
           }
         }
 
-        setState(() {
-          _actualSpeechCount = speechCount;
-          if (first != null && last != null) {
-            _actualFocusTime =
-                last!.difference(first!).inMinutes.clamp(0, 9999);
-          }
-        });
+        // setState는 finally에서 한 번만 호출하도록 로직 변경
+        _actualSpeechCount = speechCount;
+        if (first != null && last != null) {
+          _actualFocusTime =
+              last!.difference(first!).inMinutes.clamp(0, 9999);
+        }
       }
     } catch (e) {
       debugPrint("[ReportProgressBox] 데이터 불러오기 실패: $e");
     } finally {
-      setState(() => _isLoading = false);
+      // 모든 데이터 로드가 완료된 후 UI 업데이트
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -120,23 +166,60 @@ class _ReportProgressBoxState extends State<ReportProgressBox> {
             ),
           ),
           const SizedBox(height: 16),
-          if (_goalContext != null)
-            Container(
+
+          // 모든 미션 상황 텍스트 출력
+          ..._goalContexts.asMap().entries.map((entry) {
+            final index = entry.key;
+            final contextText = entry.value;
+            final missionNumber = index + 1;
+
+            return Container(
               padding: const EdgeInsets.all(12),
-              margin: const EdgeInsets.only(bottom: 16),
+              margin: const EdgeInsets.only(bottom: 8),
               decoration: BoxDecoration(
                 color: const Color(0xFFFFF3DC),
                 borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                "상황: $_goalContext",
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Colors.black87,
-                  height: 1.4,
+                border: Border.all(
+                  color: const Color(0xFFFFD180),
+                  width: 1,
                 ),
               ),
-            ),
+              child: RichText(
+                text: TextSpan(
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Colors.black87,
+                    height: 1.0,
+                  ),
+                  children: <TextSpan>[
+                    TextSpan(
+                      text: "목표 상황 $missionNumber",
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold, // 미션 번호 굵게
+                        color: Color(0xFF5D4037), // 짙은 갈색 등 포인트 색상
+                      ),
+                    ),
+                    const TextSpan(
+                      text: " | ", // 구분자
+                      style: TextStyle(
+                        fontWeight: FontWeight.normal,
+                        color: Colors.black54,
+                      ),
+                    ),
+                    TextSpan(
+                      text: contextText, // 상황 텍스트
+                      style: const TextStyle(
+                        fontWeight: FontWeight.normal,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
+
+          if (_goalContexts.isNotEmpty) const SizedBox(height: 8),
 
           _buildProgressRow(
             label: "발화 횟수",
