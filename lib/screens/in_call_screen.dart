@@ -12,6 +12,7 @@ import '../widgets/chat_bubble.dart';
 import '../widgets/hidden_touch_layer.dart';
 import '../services/scenario_service.dart';
 import '../services/mission_service.dart';
+import '../services/traffic_control_service.dart';
 
 
 class InCallScreen extends StatefulWidget {
@@ -31,6 +32,7 @@ class _InCallScreenState extends State<InCallScreen> {
   bool _isListening = false; // 사용자가 현재 말하고 있는지 여부. 버튼 조작
   bool _isThinking = false; // GPT 처리중
   bool _isHintMode = false;
+  bool _isMissionFailed = false;
   int _stage2TurnCount = 0;
 
   String dummySpeech = "";
@@ -45,6 +47,7 @@ class _InCallScreenState extends State<InCallScreen> {
   late TTSService _ttsService;
   late ScenarioService _scenarioService;
   late MissionService _missionService;
+  late TrafficControlService _trafficControlService;
   final GPTResponse gpt = GPTResponse();
 
   late ConversationService _conversation;
@@ -58,6 +61,7 @@ class _InCallScreenState extends State<InCallScreen> {
     _ttsService = TTSService();
     _scenarioService = ScenarioService();
     _missionService = MissionService();
+    _trafficControlService = TrafficControlService();
     _conversation = ConversationService(
         stt: _sttService,
         tts: _ttsService,
@@ -157,6 +161,7 @@ class _InCallScreenState extends State<InCallScreen> {
         dummySpeech = hintMessage; // 텍스트 갱신
         _isHintMode = true; // 모방모드 활성화
         _isThinking = false;
+        _isMissionFailed = true;
       });
 
       // DB 저장 (타입: hint_guide)
@@ -174,7 +179,10 @@ class _InCallScreenState extends State<InCallScreen> {
       // 3회 미만 -> 단순 재질문 (기존 로직)
       debugPrint("재시도 모드 (${_missionService.currentFailureCount}/3)");
 
-      setState(() => _isThinking = false);
+      setState(() {
+        _isThinking = false;
+        _isMissionFailed = true;
+      });
 
       // 기존 질문 다시 읽기
       await _ttsService.speak(dummySpeech, userName);
@@ -199,6 +207,9 @@ class _InCallScreenState extends State<InCallScreen> {
 
     // 실패 카운트 리셋
     _missionService.reset();
+    setState(() {
+      _isMissionFailed = false;
+    });
 
     // 칭찬 및 3단계 이동
     await _enterPraiseMode();
@@ -429,7 +440,7 @@ class _InCallScreenState extends State<InCallScreen> {
       );
 
       // 이미지 생성 (옵션)
-      const bool useDalle = false; // 개발 테스트용 -> false
+      const bool useDalle = true; // 개발 테스트용 -> false
       String imageBase64 = "";
 
       if (useDalle) {
@@ -519,6 +530,9 @@ class _InCallScreenState extends State<InCallScreen> {
 
     // 3. 실패 카운트 리셋
     _missionService.reset();
+    setState(() {
+      _isMissionFailed = false;
+    });
 
     // 4. 서비스 상태를 3단계로 변경
     // (이제부터 아이가 말을 걸면 ConversationService의 3단계 프롬프트가 적용됨)
@@ -591,6 +605,7 @@ class _InCallScreenState extends State<InCallScreen> {
     setState(() {
       _isThinking = true;
       dummySpeech = "생각 중...";
+      _isMissionFailed = false;
     });
 
     // 1. 랜덤 시나리오 교체
@@ -623,7 +638,6 @@ class _InCallScreenState extends State<InCallScreen> {
 
     setState(() {
       dummySpeech = newProblemMessage;
-      _isThinking = false;
     });
 
     // 새 문제 DB 저장
@@ -635,6 +649,13 @@ class _InCallScreenState extends State<InCallScreen> {
     );
 
     await _ttsService.speak(newProblemMessage, userName);
+
+    // TTS가 완전히 끝난 후, traffic light -> Yellow로 전환 허용
+    if (mounted) {
+      setState(() {
+        _isThinking = false;
+      });
+    }
   }
 
   // 말하기 버튼: STT 수동 제어
@@ -686,7 +707,14 @@ class _InCallScreenState extends State<InCallScreen> {
                 width: 120,
                 height: 50,
                 child: Image.asset(
-                  'assets/temp/traffic_light.png',
+                  _trafficControlService.getTrafficLightAsset(
+                    conversationStage: _conversation.conversationStage,
+                    isListening: _isListening,
+                    isThinking: _isThinking,
+                    isTtsPlaying: _ttsService.isPlaying,
+                    isMissionFailed: _isMissionFailed,
+                    isGreeting: _isGreeting,
+                  ),
                   fit: BoxFit.fill,
                 ),
               ),
