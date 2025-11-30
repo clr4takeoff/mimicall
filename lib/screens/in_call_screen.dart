@@ -607,14 +607,14 @@ class _InCallScreenState extends State<InCallScreen> {
       _isMissionFailed = false;
     });
 
-    // 1. 랜덤 시나리오 교체
+    // 랜덤 시나리오 교체
     await _scenarioService.loadNewScenario(userName);
 
-    // 2. 대화 서비스 상태를 2단계로 설정
+    // 대화 서비스 상태를 2단계로 설정
     _conversation.startNewRound();
-    _stage2TurnCount = 0;
+    _stage2TurnCount = 1;
 
-    // 3. GPT 대화 맥락 삭제
+    // GPT 대화 맥락 삭제
     gpt.startNewTopic();
 
     // 새로운 문제 제시
@@ -637,6 +637,7 @@ class _InCallScreenState extends State<InCallScreen> {
 
     setState(() {
       dummySpeech = newProblemMessage;
+      _lastSystemMessage = newProblemMessage;
     });
 
     // 새 문제 DB 저장
