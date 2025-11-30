@@ -35,6 +35,11 @@ class GPTResponse {
     debugPrint("[GPT] 캐릭터 초기화 완료\n$systemPrompt");
   }
 
+  void startNewTopic() {
+    debugPrint("[GPT] ♻️ 새로운 주제 시작 -> 이전 대화 기록 삭제 (System Prompt만 유지)");
+    _conversationHistory.removeWhere((message) => message["role"] != "system");
+  }
+
 
   Future<String> sendMessageToLLM(String userMessage, {String? stageInstruction}) async {
     final apiKey = dotenv.env['OPENAI_API_KEY'] ?? '';
@@ -198,12 +203,4 @@ class GPTResponse {
       return "";
     }
   }
-
-  /// 요정모드 종료 후 캐릭터 대화 컨텍스트 초기화
-  void resetCharacterContext() {
-    debugPrint("[GPT] 캐릭터 컨텍스트 초기화 (요정 모드 종료)");
-    _conversationHistory.clear(); // GPT 대화 기록만 초기화
-  }
-
-
 }

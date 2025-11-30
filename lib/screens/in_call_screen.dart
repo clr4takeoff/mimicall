@@ -31,6 +31,7 @@ class _InCallScreenState extends State<InCallScreen> {
   bool _isListening = false; // 사용자가 현재 말하고 있는지 여부. 버튼 조작
   bool _isThinking = false; // GPT 처리중
   bool _isHintMode = false;
+  int _stage2TurnCount = 0;
 
   String dummySpeech = "";
   String childSpeech = "";
@@ -38,6 +39,7 @@ class _InCallScreenState extends State<InCallScreen> {
   DateTime? _lastAssistantEndTime;
   DateTime? _speechStartTime;
   String _characterName = "캐릭터";
+  String _lastSystemMessage = "";
 
   late STTService _sttService;
   late TTSService _ttsService;
@@ -199,7 +201,7 @@ class _InCallScreenState extends State<InCallScreen> {
     _missionService.reset();
 
     // 칭찬 및 3단계 이동
-    await _forceNextStage();
+    await _enterPraiseMode();
   }
 
   Future<void> _speakInitialGreeting() async {
@@ -246,9 +248,12 @@ class _InCallScreenState extends State<InCallScreen> {
               : "캐릭터";
         });
 
+        final currentScenario = _scenarioService.currentContext ?? "일상 대화";
+
         gpt.initializeCharacterContext(
           characterName: settings.characterName,
-          context: settings.contextList.join(", "),
+          context: currentScenario,
+          contextText: currentScenario,
           style: settings.speakingStyle,
           targetSpeechCount: settings.targetSpeechCount,
         );
@@ -287,16 +292,52 @@ class _InCallScreenState extends State<InCallScreen> {
         debugPrint("[ResponseDelay] 아이 반응 시간: ${responseDelayMs}ms");
       }
 
-      // 아이 발화 텍스트 표시 + GPT 준비 상태 진입
+      // GPT 준비 상태 진입
       setState(() {
         childSpeech = text;
         isSpeaking = true;
         dummySpeech = "음... 생각 중이야";
-        _isThinking = true; // GPT 생각 중 → 마이크 회색 유지
+        _isThinking = true;
       });
 
       _conversation.registerUserSpeech(text);
 
+      // 2단계: 마이크 트리거 비활성화
+      if (_conversation.conversationStage == 2) {
+        // 0, 1 (총 2회) 까지는 허용
+        if (_stage2TurnCount < 2) {
+          debugPrint("[InCallScreen] 2단계 발화 허용 (${_stage2TurnCount + 1}번째)");
+
+          _stage2TurnCount++;
+        } else {
+          // B. 두 번째 발화부터 차단 (버튼 대기)
+          debugPrint("[InCallScreen] 2단계 추가 발화 -> 자동 응답 차단. 보호자 버튼 대기.");
+
+          if (mounted) {
+            setState(() {
+              _isThinking = false;
+              // 기억해둔 마지막 질문으로 복구 (없으면 기본값)
+              dummySpeech = _lastSystemMessage.isNotEmpty
+                  ? _lastSystemMessage
+                  : "다시 한 번 말해줄래?";
+            });
+          }
+          // DB 저장만 하고 종료
+          await _conversation.saveMessage(
+            dbPath: widget.dbPath,
+            role: "user",
+            text: text,
+            timestamp: now,
+            extra: {
+              if (responseDelayMs != null) "responseDelayMs": responseDelayMs,
+              if (speechDurationMs != null) "speechDurationMs": speechDurationMs,
+            },
+          );
+          return;
+        }
+      }
+
+      // 1,3단계: 마이크 트리거 활성화
       final userName = UserInfo.name ?? "unknown";
       final stageInstruction = await _conversation.getStageInstruction(
         username: userName,
@@ -314,8 +355,9 @@ class _InCallScreenState extends State<InCallScreen> {
       // GPT 응답 도착 시 — 말풍선 업데이트만 하고, 버튼은 계속 회색 유지
       if (mounted) {
         setState(() {
+          _lastSystemMessage = reply;
           dummySpeech = reply; // 말풍선만 변경
-          // _isThinking 유지 (아직 TTS 시작 안 됨)
+          // _isThinking 유지 (아직 TTS 대기)
         });
       }
 
@@ -381,7 +423,7 @@ class _InCallScreenState extends State<InCallScreen> {
         context: context,
         barrierDismissible: false,
         builder: (_) => const Center(
-          child: CircularProgressIndicator(color: Colors.purpleAccent),
+          child: CircularProgressIndicator(color: Colors.orange),
         ),
       );
 
@@ -461,61 +503,138 @@ class _InCallScreenState extends State<InCallScreen> {
     }
   }
 
-  // 3단계로 강제 전환
-  Future<void> _forceNextStage() async {
-    if (_isThinking || _isGreeting || _ttsService.isPlaying) return;
+  // 성공 처리 & 3단계(칭찬) 진입
+  Future<void> _enterPraiseMode() async {
+    final userName = UserInfo.name ?? "친구";
 
-    debugPrint("[InCallScreen] Next 버튼 클릭 → 3단계(마무리) 전환 시작");
+    debugPrint("[InCallScreen] 🎉 미션 성공! 3단계(칭찬 모드) 진입");
 
-    await _sttService.stopListening();
+    // 1. 동작 중지
     await _ttsService.stop();
+    await _sttService.stopListening(tempStop: true);
+
+    // 2. 모방 모드 해제
+    if (_isHintMode) setState(() => _isHintMode = false);
+
+    // 3. 실패 카운트 리셋
+    _missionService.reset();
+
+    // 4. 서비스 상태를 3단계로 변경
+    // (이제부터 아이가 말을 걸면 ConversationService의 3단계 프롬프트가 적용됨)
+    _conversation.conversationStage = 3;
+
+    final solvedMission = _scenarioService.currentTargetSpeech ?? "정답";
+
+    _conversation.registerUserSpeech(solvedMission); // 턴 수 증가
 
     setState(() {
-      _isListening = false;
       _isThinking = true;
-      dummySpeech = "마무리하는 중...";
+      dummySpeech = "생각하는 중...";
     });
 
-    // 서비스의 상태를 먼저 3단계로 강제 변경
-    // 턴수도 강제로 늘려둬야 나중에 서비스 로직에 의해 단계가 롤백되지 않음
-    _conversation.conversationStage = 3;
-    _conversation.turnCount = 20;
+    await _conversation.saveMessage(
+      dbPath: widget.dbPath,
+      role: "user",
+      text: solvedMission,
+      extra: {
+        "isCorrectAnswer": true,
+        "scenarioContext": _scenarioService.currentContext,
+      },
+    );
 
-    try {
-      final userName = UserInfo.name ?? "친구";
+    // 칭찬 멘트 생성 및 재생
+    final praisePrompt = """
+    아이가 미션인 '$solvedMission'을 말하는 데 성공했어!
+    캐릭터로서 아주 기뻐하면서 아이를 듬뿍 칭찬해줘.
+    반말을 사용하고, 감탄사를 섞어서 신나게 말해줘.
+    """;
 
-      final stageInstruction = await _conversation.getStageInstruction(
-        username: userName,
-        characterName: _characterName,
-      );
+    final praiseMessage = await gpt.sendMessageToLLM(
+        "나 말하는 것에 성공했어!", // 트리거
+        stageInstruction: praisePrompt
+    );
 
-      final transitionReply = await gpt.sendMessageToLLM(
-        "이제 헤어질 시간이야. 작별 인사를 해줘.",
-        stageInstruction: stageInstruction, // 여기에 3단계 프롬프트가 들어감
-      );
+    if (!mounted) return;
 
-      if (!mounted) return;
+    setState(() {
+      dummySpeech = praiseMessage;
+      _isThinking = false;
+    });
 
-      setState(() {
-        dummySpeech = transitionReply;
-        _isThinking = false;
-      });
+    // 칭찬 DB 저장
+    await _conversation.saveMessage(
+      dbPath: widget.dbPath,
+      role: "z_assistant",
+      text: praiseMessage,
+      extra: {"type": "praise"},
+    );
 
-      await _conversation.saveMessage(
-        dbPath: widget.dbPath,
-        role: "z_assistant",
-        text: transitionReply,
-      );
+    await _ttsService.speak(praiseMessage, userName);
 
-      await _ttsService.speak(transitionReply, userName);
-
-    } catch (e) {
-      debugPrint("단계 전환 중 오류: $e");
-      if (mounted) {
-        setState(() => _isThinking = false);
-      }
-    }
+    // 이제 아이가 마이크에 대고 말을 하면 STT 리스너가 동작하고, 3단계 대화를 이어가게 됨
   }
+
+
+  // 새로운 라운드(2단계) 시작
+  Future<void> _startNextMission() async {
+    // 칭찬 중이거나 인사 중이면 무시 (원하면 빼도 됨)
+    if (_isGreeting) return;
+
+    final userName = UserInfo.name ?? "친구";
+    debugPrint("[InCallScreen] 🔄 Next 버튼 클릭 -> 다음 미션(2단계) 로드");
+
+    // 1. 동작 중지
+    await _ttsService.stop();
+    await _sttService.stopListening(tempStop: true);
+
+    setState(() {
+      _isThinking = true;
+      dummySpeech = "생각 중...";
+    });
+
+    // 1. 랜덤 시나리오 교체
+    await _scenarioService.loadNewScenario(userName);
+
+    // 2. 대화 서비스 상태를 2단계로 설정
+    _conversation.startNewRound();
+    _stage2TurnCount = 0;
+
+    // 3. GPT 대화 맥락 삭제
+    gpt.startNewTopic();
+
+    // 새로운 문제 제시
+    if (!mounted) return;
+
+    // 새 상황 지침 가져오기
+    final nextStageInstruction = await _conversation.getStageInstruction(
+      username: userName,
+      characterName: _characterName,
+    );
+
+    // GPT에게 새로운 문제 상황 연기 요청
+    final newProblemMessage = await gpt.sendMessageToLLM(
+        "(새로운 상황 시작)",
+        stageInstruction: nextStageInstruction
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      dummySpeech = newProblemMessage;
+      _isThinking = false;
+    });
+
+    // 새 문제 DB 저장
+    await _conversation.saveMessage(
+      dbPath: widget.dbPath,
+      role: "z_assistant",
+      text: newProblemMessage,
+      extra: {"type": "new_mission"},
+    );
+
+    await _ttsService.speak(newProblemMessage, userName);
+  }
+
   // 말하기 버튼: STT 수동 제어
   Future<void> _toggleRecording() async {
     if (_ttsService.isPlaying || _isGreeting) return;
@@ -617,7 +736,7 @@ class _InCallScreenState extends State<InCallScreen> {
 
             Positioned(
               top: MediaQuery.of(context).size.height * 0.28,
-              child: TopBubble(text: dummySpeech, isFairyMode: isFairyMode,),
+              child: TopBubble(text: dummySpeech),
             ),
             Positioned(
               bottom: 150,
@@ -670,7 +789,7 @@ class _InCallScreenState extends State<InCallScreen> {
                   FloatingActionButton(
                     heroTag: 'next',
                     backgroundColor: const Color(0xFF7CCAF3),
-                    onPressed: _forceNextStage,
+                    onPressed: _startNextMission,
                     child: const Icon(
                       Icons.arrow_forward_rounded,
                       size: 36,
