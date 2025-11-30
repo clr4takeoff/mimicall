@@ -315,8 +315,7 @@ class _InCallScreenState extends State<InCallScreen> {
 
       // 2단계: 마이크 트리거 비활성화
       if (_conversation.conversationStage == 2) {
-        // 0, 1 (총 2회) 까지는 허용
-        if (_stage2TurnCount < 2) {
+        if (_stage2TurnCount < 1) { // 2회까지 허용 -> 1회만 허용으로 수정
           debugPrint("[InCallScreen] 2단계 발화 허용 (${_stage2TurnCount + 1}번째)");
 
           _stage2TurnCount++;
