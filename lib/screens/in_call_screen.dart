@@ -13,6 +13,7 @@ import '../widgets/hidden_touch_layer.dart';
 import '../services/scenario_service.dart';
 import '../services/mission_service.dart';
 import '../services/traffic_control_service.dart';
+import 'dart:math';
 
 
 class InCallScreen extends StatefulWidget {
@@ -679,20 +680,46 @@ class _InCallScreenState extends State<InCallScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final double screenWidth = screenSize.width;
+    final double screenHeight = screenSize.height;
+
+    // 1. 세로 위치 비율 (Top, Bottom)
+    final double trafficLightTop = screenHeight * 0.06;
+    final double nameTextTop = screenHeight * 0.14;
+    final double bubbleTop = screenHeight * 0.28;
+    final double characterTop = screenHeight * 0.4;
+    final double userBoxBottom = screenHeight * 0.2;
+    final double buttonsBottom = screenHeight * 0.08;
+
+    // 2. 크기 및 폰트
+    final double trafficLightWidth = min(screenWidth * 0.28, 150.0);
+    final double characterHeight = screenHeight * 0.3;
+
+    // 폰트 크기
+    final double nameFontSize = min(screenWidth * 0.07, 40.0);
+    final double statusFontSize = min(screenWidth * 0.03, 25.0);
+    final double userTextFontSize = min(screenWidth * 0.03, 19.0);
+
+    // 버튼 크기
+    final double buttonSize = min(screenWidth * 0.2, 60.0);
+    final double iconSize = min(screenWidth * 0.1, 32.0);
+    final double gapSize = screenWidth * 0.1;
+
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: isFairyMode
                 ? [
-              Color(0xFFD1C4E9),
-              Color(0xFFA9C2DE),
-              Color(0xFFB3E5FC),
+              const Color(0xFFD1C4E9),
+              const Color(0xFFA9C2DE),
+              const Color(0xFFB3E5FC),
             ]
                 : [
-              Color(0xFFFFE0F0),
-              Color(0xFFFFF9C4),
-              Color(0xFFB3E5FC),
+              const Color(0xFFFFE0F0),
+              const Color(0xFFFFF9C4),
+              const Color(0xFFB3E5FC),
             ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -701,11 +728,12 @@ class _InCallScreenState extends State<InCallScreen> {
         child: Stack(
           alignment: Alignment.center,
           children: [
+            // 1. 신호등
             Positioned(
-              top: 60,
+              top: trafficLightTop,
               child: SizedBox(
-                width: 120,
-                height: 50,
+                width: trafficLightWidth,
+                height: trafficLightWidth * 0.42,
                 child: Image.asset(
                   _trafficControlService.getTrafficLightAsset(
                     conversationStage: _conversation.conversationStage,
@@ -719,17 +747,19 @@ class _InCallScreenState extends State<InCallScreen> {
                 ),
               ),
             ),
+
+            // 2. 캐릭터 이름 및 상태 텍스트
             Positioned(
-              top: 120,
+              top: nameTextTop,
               child: Column(
                 children: [
                   Text(
                     _characterName,
-                    style: const TextStyle(
-                      color: Color(0xFF787878),
-                      fontSize: 30,
+                    style: TextStyle(
+                      color: const Color(0xFF787878),
+                      fontSize: nameFontSize,
                       fontWeight: FontWeight.bold,
-                      shadows: [
+                      shadows: const [
                         Shadow(
                           color: Colors.white70,
                           blurRadius: 6,
@@ -737,13 +767,13 @@ class _InCallScreenState extends State<InCallScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
+                  SizedBox(height: screenHeight * 0.01),
+                  Text(
                     "통화 중...",
                     style: TextStyle(
-                      color: Color(0xFF898989),
-                      fontSize: 18,
-                      shadows: [
+                      color: const Color(0xFF898989),
+                      fontSize: statusFontSize,
+                      shadows: const [
                         Shadow(color: Colors.black26, blurRadius: 3),
                       ],
                     ),
@@ -752,58 +782,65 @@ class _InCallScreenState extends State<InCallScreen> {
               ),
             ),
 
+            // 3. 캐릭터 이미지
             Positioned(
-              top: MediaQuery.of(context).size.height * 0.4,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                height: 240,
+              top: characterTop,
+              left: 0,
+              right: 0,
+              child: Container(
+                height: characterHeight,
+                alignment: Alignment.topCenter,
                 child: Image.asset(
-                  'assets/characters/character_talking.gif', // 항상 GIF 렌더링 (TODO: 동적 수정)
+                  'assets/characters/character_talking.gif',
                   fit: BoxFit.contain,
                 ),
               ),
             ),
 
+            // 4. 말풍선 (TopBubble)
             Positioned(
-              top: MediaQuery.of(context).size.height * 0.28,
-              child: TopBubble(text: dummySpeech),
+              top: bubbleTop,
+              width: screenWidth * 0.9, // 화면의 90% 폭
+              child: Center(child: TopBubble(text: dummySpeech)),
             ),
+
+            // 5. 사용자 발화 표시 박스 (하단)
             Positioned(
-              bottom: 150,
+              bottom: userBoxBottom,
               child: Container(
-                  width: MediaQuery.of(context).size.width * 0.8,
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFEEBF),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: const Color(0xFFFFD180),
-                      width: 1.5,
-                    ),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Colors.black12,
-                        blurRadius: 4,
-                        offset: Offset(2, 2),
-                      ),
-                    ],
+                width: screenWidth * 0.85,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFEEBF),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: const Color(0xFFFFD180),
+                    width: 1.5,
                   ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 4,
+                      offset: Offset(2, 2),
+                    ),
+                  ],
+                ),
                 child: Builder(
                   builder: (_) {
                     final name = UserInfo.name ?? "아이";
                     final lastChar = name.characters.last;
                     final codeUnit = lastChar.codeUnitAt(0);
-                    final hasBatchim = (codeUnit - 0xAC00) % 28 != 0; // 받침 여부 판별
-                    final particle = hasBatchim ? "이" : ""; // 받침 있으면 "이", 없으면 공백
+                    final hasBatchim = (codeUnit - 0xAC00) % 28 != 0;
+                    final particle = hasBatchim ? "이" : "";
                     final defaultText = "$name$particle가 말하는 내용은 여기 나타날 거야.";
 
                     return Text(
                       childSpeech.isEmpty ? defaultText : childSpeech,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Color(0xFF000000),
-                        fontSize: 15,
-                        height: 1.3,
+                      style: TextStyle(
+                        color: const Color(0xFF000000),
+                        fontSize: userTextFontSize,
+                        height: 1.5,
                       ),
                     );
                   },
@@ -811,55 +848,73 @@ class _InCallScreenState extends State<InCallScreen> {
               ),
             ),
 
+            // 6. 하단 버튼들 (Next, End, Mic)
             Positioned(
-              bottom: 65,
+              bottom: buttonsBottom,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  FloatingActionButton(
-                    heroTag: 'next',
-                    backgroundColor: const Color(0xFF7CCAF3),
-                    onPressed: _startNextMission,
-                    child: const Icon(
-                      Icons.arrow_forward_rounded,
-                      size: 36,
-                      color: Colors.white,
+                  // [핵심 변경 2] SizedBox로 감싸서 width, height 지정
+                  SizedBox(
+                    width: buttonSize,
+                    height: buttonSize,
+                    child: FloatingActionButton(
+                      heroTag: 'next',
+                      backgroundColor: const Color(0xFF7CCAF3),
+                      onPressed: _startNextMission,
+                      child: Icon(
+                        Icons.arrow_forward_rounded,
+                        size: iconSize, // 아이콘 크기도 비율에 맞게
+                        color: Colors.white,
+                      ),
                     ),
                   ),
 
-                  const SizedBox(width: 40),
+                  SizedBox(width: gapSize),
 
-                  FloatingActionButton(
-                    heroTag: 'end',
-                    backgroundColor: const Color(0xFFFF6B6B),
-                    onPressed: _onEndCall,
-                    child: const Icon(Icons.call_end, size: 36),
+                  SizedBox(
+                    width: buttonSize,
+                    height: buttonSize,
+                    child: FloatingActionButton(
+                      heroTag: 'end',
+                      backgroundColor: const Color(0xFFFF6B6B),
+                      onPressed: _onEndCall,
+                      child: Icon(Icons.call_end, size: iconSize),
+                    ),
                   ),
 
-                  const SizedBox(width: 40),
+                  SizedBox(width: gapSize),
 
-                  FloatingActionButton(
-                    heroTag: 'mic',
-                    backgroundColor: _isListening
-                        ? const Color(0xFFed6b72)
-                        : (_isThinking || _ttsService.isPlaying || _isGreeting
-                        ? Colors.grey
-                        : const Color(0xFF68d94e)),
-                    onPressed: (_isThinking || _ttsService.isPlaying || _isGreeting)
-                        ? null
-                        : _toggleRecording,
+                  SizedBox(
+                    width: buttonSize,
+                    height: buttonSize,
+                    child: FloatingActionButton(
+                      heroTag: 'mic',
+                      backgroundColor: _isListening
+                          ? const Color(0xFFed6b72)
+                          : (_isThinking || _ttsService.isPlaying || _isGreeting
+                          ? Colors.grey
+                          : const Color(0xFF68d94e)),
+                      onPressed: (_isThinking ||
+                          _ttsService.isPlaying ||
+                          _isGreeting)
+                          ? null
+                          : _toggleRecording,
 
-                    child: Icon(
-                      _isListening ? Icons.stop : Icons.mic,
-                      size: 32,
-                      color: Colors.white,
+                      child: Icon(
+                        _isListening ? Icons.stop : Icons.mic,
+                        size: iconSize,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
+
+            // 7. 히든 터치 레이어
             HiddenTouchLayer(
-              height: 200,
+              height: screenHeight * 0.25,
               onLeftTap: _onLeftHiddenTap,
               onRightTap: _onRightHiddenTap,
             ),

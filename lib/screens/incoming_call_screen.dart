@@ -3,6 +3,7 @@ import 'package:firebase_database/firebase_database.dart';
 import 'dart:convert';
 import 'in_call_screen.dart';
 import '../utils/user_info.dart';
+import 'dart:math';
 
 class IncomingCallScreen extends StatefulWidget {
   final String? userName;
@@ -85,6 +86,23 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
       );
     }
 
+    // [화면 크기 계산 및 반응형 변수 설정]
+    final screenSize = MediaQuery.of(context).size;
+    final double screenWidth = screenSize.width;
+    final double screenHeight = screenSize.height;
+
+    // 위치 비율 설정
+    final double textTop = screenHeight * 0.18;
+    final double imageTop = screenHeight * 0.38;
+    final double buttonsBottom = screenHeight * 0.1;
+
+    // 크기 설정 (화면 크기에 비례하되 너무 커지지 않게 min 사용)
+    final double nameFontSize = min(screenWidth * 0.09, 40.0); // 이름 폰트
+    final double subTextFontSize = min(screenWidth * 0.045, 20.0); // 안내문 폰트
+    final double characterImageHeight = screenHeight * 0.3; // 이미지 높이
+    final double buttonGap = screenWidth * 0.2; // 버튼 사이 간격
+    final double iconSize = min(screenWidth * 0.09, 36.0); // 아이콘 크기
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -108,21 +126,24 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
 
           // 캐릭터 이름 & 안내문
           Positioned(
-            top: 140,
+            top: textTop,
             child: Column(
               children: [
                 Text(
-                  characterName, // Firebase에서 가져온 캐릭터 이름 표시
-                  style: const TextStyle(
+                  characterName,
+                  style: TextStyle(
                     color: Colors.white,
-                    fontSize: 34,
+                    fontSize: nameFontSize,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 8),
-                const Text(
+                SizedBox(height: screenHeight * 0.01),
+                Text(
                   "전화가 걸려오고 있어요!",
-                  style: TextStyle(color: Colors.white70, fontSize: 18),
+                  style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: subTextFontSize
+                  ),
                 ),
               ],
             ),
@@ -130,21 +151,23 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
 
           // 중앙 캐릭터 이미지
           Positioned(
-            top: MediaQuery.of(context).size.height * 0.35,
+            top: imageTop,
             child: imageBase64 != null
                 ? Image.memory(
               base64Decode(imageBase64!),
-              height: 200,
+              height: characterImageHeight,
+              fit: BoxFit.contain,
             )
                 : Image.asset(
               'assets/characters/character.png',
-              height: 200,
+              height: characterImageHeight,
+              fit: BoxFit.contain,
             ),
           ),
 
           // 하단 수락/거절 버튼
           Positioned(
-            bottom: 80,
+            bottom: buttonsBottom,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -154,9 +177,9 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
                   onPressed: () {
                     Navigator.pop(context);
                   },
-                  child: const Icon(Icons.call_end, size: 36),
+                  child: Icon(Icons.call_end, size: iconSize),
                 ),
-                const SizedBox(width: 80),
+                SizedBox(width: buttonGap),
                 FloatingActionButton(
                   heroTag: 'accept',
                   backgroundColor: Colors.green,
@@ -165,6 +188,8 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
                     UserInfo.name = userName;
                     final dbPath = await _createReportRecord(userName);
 
+                    if (!mounted) return;
+
                     Navigator.pushReplacement(
                       context,
                       MaterialPageRoute(
@@ -172,7 +197,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
                       ),
                     );
                   },
-                  child: const Icon(Icons.call, size: 36),
+                  child: Icon(Icons.call, size: iconSize),
                 ),
               ],
             ),
